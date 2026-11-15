@@ -1,0 +1,39 @@
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: hub
+          POSTGRES_PASSWORD: hub
+          POSTGRES_DB: hub
+        ports: [5432:5432]
+        options: --health-cmd "pg_isready -U hub" --health-interval 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: [6379:6379]
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Prepare isolated CI configuration
+        run: |
+          cp .env.example .env
+          echo 'SEED_ADMIN_PASSWORD=ci-only-illustrative-password' >> .env
+          echo 'SEED_DEMO=true' >> .env
+      - run: pnpm typecheck && pnpm lint && pnpm format:check && pnpm test
+      - run: pnpm test:integration
+      - run: pnpm db:migrate && pnpm db:seed
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - run: pnpm build
