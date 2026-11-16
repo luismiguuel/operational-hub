@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 import { authResponse } from '@hub/shared';
-import { ArrowUpRight, Waypoints } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import { api, post, useSession } from '../core/api';
 import { ErrorMessage } from '../core/components';
 import { Logo } from '../core/ui/Logo';

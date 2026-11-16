@@ -90,7 +90,6 @@ Consulte [arquitetura e limites](docs/architecture.md) e [contrato REST](docs/ap
 
 O build da SPA fica em `apps/web/dist`. API e worker executam fontes TypeScript com `tsx`; o build faz verificação/compilação TypeScript. Hospede API/worker em Node com acesso TCP a PostgreSQL/Redis e sirva a SPA com fallback para `index.html`, encaminhando `/api` e upgrades WebSocket à API. Não há publicação externa nem infraestrutura de produção provisionada.
 
-
 ## Convenção de commits e branches
 
 - Cada commit deve ser pequeno, atômico e representar uma única responsabilidade lógica, mantendo o repositório íntegro.

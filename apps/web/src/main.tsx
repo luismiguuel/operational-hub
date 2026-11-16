@@ -133,7 +133,13 @@ function App() {
             <Avatar name={user.name} />
             <div>
               <strong>{user.name}</strong>
-              <small>{user.role === 'ADMIN' ? 'Diretoria' : user.role === 'LEADER' ? `Liderança · ${user.area}` : `${user.area} · ${user.title}`}</small>
+              <small>
+                {user.role === 'ADMIN'
+                  ? 'Diretoria'
+                  : user.role === 'LEADER'
+                    ? `Liderança · ${user.area}`
+                    : `${user.area} · ${user.title}`}
+              </small>
             </div>
             <button
               aria-label="Sair da conta"

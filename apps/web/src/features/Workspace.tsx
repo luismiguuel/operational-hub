@@ -27,7 +27,6 @@ import {
   Search,
   SlidersHorizontal,
   CalendarDays,
-  CheckCheck,
   ArrowUpRight,
   LayoutGrid,
   List,
