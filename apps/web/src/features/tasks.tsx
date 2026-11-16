@@ -73,7 +73,7 @@ export function TaskDetail({
   return (
     <Modal
       title={task.title}
-      description={`${task.kind === 'EPIC' ? 'Épico' : 'Tarefa'} • ELO-${task.id.slice(0, 4).toUpperCase()} • ${dateLabel(task.dueDate)}`}
+      description={`${task.kind === 'EPIC' ? 'Épico' : 'Tarefa'} • CITIHUB-${task.id.slice(0, 4).toUpperCase()} • ${dateLabel(task.dueDate)}`}
       open
       onOpenChange={(open) => {
         if (!open) onClose();

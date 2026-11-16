@@ -1,6 +1,6 @@
-# Elo · Operational Hub
+# CITi Hub · Operational Hub
 
-Fundação de um sistema de gestão para Empresas Juniores. Monorepo TypeScript estrito, ESM, monólito modular com eventos e SPA React. A marca provisória **Elo** e os grafismos são originais; a apresentação usa a skill [citi-visual-language](.agents/skills/citi-visual-language/SKILL.md).
+Fundação de um sistema de gestão para Empresas Juniores. Monorepo TypeScript estrito, ESM, monólito modular com eventos e SPA React. A marca **CITi Hub** e os grafismos são placeholders originais; a apresentação usa a skill [citi-visual-language](.agents/skills/citi-visual-language/SKILL.md).
 
 ## Executar localmente
 
@@ -70,7 +70,7 @@ pnpm exec playwright install --with-deps chromium
 pnpm test:e2e
 ```
 
-O teste abre desktop e mobile, autentica, verifica ausência de overflow, abre um card, valida arraste e persistência após recarregar no desktop, acessa o mapa de alocação e encerra a sessão. Screenshots são gerados em `/tmp/elo-desktop.png` e `/tmp/elo-mobile.png`. Traces estão desabilitados para evitar capturar credenciais. Dependências nativas do Chromium podem exigir instalação pelo administrador do ambiente.
+O teste abre desktop e mobile, autentica, verifica ausência de overflow, abre um card, valida arraste e persistência após recarregar no desktop, acessa o mapa de alocação e encerra a sessão. Screenshots são gerados em `/tmp/citi-hub-desktop.png` e `/tmp/citi-hub-mobile.png`. Traces estão desabilitados para evitar capturar credenciais. Dependências nativas do Chromium podem exigir instalação pelo administrador do ambiente.
 
 ## Estrutura e decisões
 
@@ -89,7 +89,6 @@ packages/shared/src/  schemas Zod, DTOs, RBAC e eventos
 Consulte [arquitetura e limites](docs/architecture.md) e [contrato REST](docs/api.md). As taxonomias de áreas/subáreas e papéis são deliberadamente estáticas nesta fundação; o administrador administra seus vínculos nos perfis. Gestão dinâmica dessas taxonomias, RAG com ingestão/embeddings/busca, burndown histórico e IA em outros pontos da operação ainda precisam de implementação. Timesheet, financeiro, chat nativo e sincronizações bidirecionais permanecem fora da v1.
 
 O build da SPA fica em `apps/web/dist`. API e worker executam fontes TypeScript com `tsx`; o build faz verificação/compilação TypeScript. Hospede API/worker em Node com acesso TCP a PostgreSQL/Redis e sirva a SPA com fallback para `index.html`, encaminhando `/api` e upgrades WebSocket à API. Não há publicação externa nem infraestrutura de produção provisionada.
-
 
 ## Convenção de commits e branches
 

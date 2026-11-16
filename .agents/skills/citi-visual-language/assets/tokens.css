@@ -1,0 +1,97 @@
+/* ==========================================================================
+   CITi Visual Language — Semantic Design Tokens
+   Calibrado para Hub Operacional SaaS (Tema único Dark Mode CITi)
+   Baseado na inspeção visual de https://citi.org.br/ e /cases/neoenergia
+   ========================================================================== */
+
+:root {
+  /* ------------------------------------------------------------------------
+     Typography
+     ------------------------------------------------------------------------ */
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --text-xs: 0.75rem;      /* 12px — micro-labels, badges, timestamps */
+  --text-sm: 0.8125rem;    /* 13px — tabelas densas, itens de sidebar, inputs */
+  --text-base: 0.875rem;   /* 14px — corpo padrão SaaS */
+  --text-md: 1rem;         /* 16px — subtítulos e cards */
+  --text-lg: 1.25rem;      /* 20px — títulos de seção */
+  --text-xl: 1.5rem;       /* 24px — cabeçalhos de página e KPIs */
+  --text-2xl: 2rem;        /* 32px — métricas de destaque */
+
+  --tracking-tight: -0.025em;
+  --tracking-normal: 0em;
+  --tracking-wide: 0.08em; /* micro-labels uppercase em monospace */
+
+  /* Dark-first forest and obsidian surfaces */
+  --bg-canvas: #080c0a;
+  --bg-surface: #101814;
+  --bg-surface-elevated: #16211c;
+  --bg-surface-hover: #1c2a23;
+  --bg-surface-active: #203229;
+  --bg-sidebar: #0b110e;
+  --bg-sidebar-elevated: #101814;
+  --bg-sidebar-hover: #1c2a23;
+  --bg-sidebar-active: rgba(0, 224, 116, 0.12);
+
+  /* Accessible text on dark forest surfaces */
+  --text-primary: #f1f5f3;
+  --text-secondary: #9cb0a6;
+  --text-muted: #82968c;
+  --text-on-dark-primary: #f1f5f3;
+  --text-on-dark-secondary: #9cb0a6;
+  --text-on-dark-muted: #82968c;
+
+  /* Fine separators and keyboard focus */
+  --border-subtle: #1e2e26;
+  --border-strong: #2b4236;
+  --border-on-dark-subtle: #1e2e26;
+  --border-on-dark-strong: #2b4236;
+  --border-focus: #00e074;
+
+  /* CITi emerald accent */
+  --accent-primary: #00e074;
+  --accent-primary-hover: #00c464;
+  --accent-primary-soft: rgba(0, 224, 116, 0.12);
+  --accent-surface: rgba(0, 224, 116, 0.12);
+  --accent-border: rgba(0, 224, 116, 0.30);
+  --accent-foreground: #04140b;
+  --accent-text-on-light: #00e074;
+  --accent-glow: radial-gradient(circle at 50% 0%, rgba(0, 224, 116, 0.12), transparent 70%);
+
+  /* Semantic status colors remain legible on dark surfaces */
+  --status-backlog-bg: #1c2a23; --status-backlog-text: #c0cec6; --status-backlog-border: #2b4236; --status-backlog-dot: #82968c;
+  --status-todo-bg: #1c2536; --status-todo-text: #c5d0ff; --status-todo-border: #394b72; --status-todo-dot: #8da5ff;
+  --status-in-progress-bg: #10271b; --status-in-progress-text: #72f0a8; --status-in-progress-border: #1c633c; --status-in-progress-dot: #00e074;
+  --status-in-review-bg: #302813; --status-in-review-text: #f6d77a; --status-in-review-border: #6b541d; --status-in-review-dot: #e8bd42;
+  --status-blocked-bg: #351c20; --status-blocked-text: #ff9a9a; --status-blocked-border: #71363b; --status-blocked-dot: #f07575;
+  --status-done-bg: #10271b; --status-done-text: #72f0a8; --status-done-border: #1c633c; --status-done-dot: #00e074;
+
+  --priority-urgent-bg: #351c20; --priority-urgent-text: #ff9a9a; --priority-urgent-border: #71363b;
+  --priority-high-bg: #302117; --priority-high-text: #ffb17e; --priority-high-border: #704626;
+  --priority-medium-bg: #302813; --priority-medium-text: #f6d77a; --priority-medium-border: #6b541d;
+  --priority-low-bg: #1c2a23; --priority-low-text: #c0cec6; --priority-low-border: #2b4236;
+
+  --area-data-ai-bg: #10271b; --area-data-ai-text: #72f0a8; --area-data-ai-border: #1c633c;
+  --area-software-bg: #172638; --area-software-text: #9bc6ff; --area-software-border: #31547a;
+  --area-discovery-bg: #292039; --area-discovery-text: #d0b8ff; --area-discovery-border: #55417a;
+  --area-design-bg: #321f2b; --area-design-text: #f3a9d0; --area-design-border: #70415d;
+  --area-negocios-bg: #302813; --area-negocios-text: #f6d77a; --area-negocios-border: #6b541d;
+  --area-operacoes-bg: #1c2a23; --area-operacoes-text: #c0cec6; --area-operacoes-border: #2b4236;
+
+  /* ------------------------------------------------------------------------
+     Geometry, Border Radius & Elevation
+     ------------------------------------------------------------------------ */
+  --radius-control: 6px;   /* linhas selecionáveis, checkboxes, menus densos */
+  --radius-input: 8px;     /* inputs, textareas, selects */
+  --radius-card: 12px;     /* cards de Kanban, painéis, modais */
+  --radius-panel: 16px;    /* containers de seção ou blocos de KPI */
+  --radius-pill: 9999px;   /* botões CTA primários/secundários e badges/tags */
+
+  --shadow-none: none;
+  --shadow-popover: 0 4px 16px rgba(0, 0, 0, 0.28);
+  --shadow-modal: 0 12px 32px rgba(0, 0, 0, 0.44);
+
+  --focus-ring: 0 0 0 2px #16211c, 0 0 0 4px #00e074;
+  --focus-ring-dark: 0 0 0 2px #0b110e, 0 0 0 4px #00e074;
+}

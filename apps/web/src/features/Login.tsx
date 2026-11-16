@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 import { authResponse } from '@hub/shared';
-import { ArrowUpRight, Waypoints } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import { api, post, useSession } from '../core/api';
 import { ErrorMessage } from '../core/components';
+import { Logo } from '../core/ui/Logo';
 export function Login() {
   const [email, setEmail] = useState(''),
     [password, setPassword] = useState('');
@@ -20,8 +21,8 @@ export function Login() {
   return (
     <main className="login">
       <section className="login-story">
-        <a href="/" className="brand">
-          <Waypoints /> elo<span>operational hub</span>
+        <a href="/" className="brand" aria-label="CITi Hub — início">
+          <Logo variant="dark" size="login" />
         </a>
         <div>
           <p className="eyebrow">PESSOAS. PROJETOS. CONTINUIDADE.</p>

@@ -12,11 +12,11 @@ import {
   ChartNoAxesCombined,
   ArrowUpRight,
   LogOut,
-  ChevronDown,
 } from 'lucide-react';
 import { api, ok, post, refresh, useSession, useUI } from './core/api';
 import type { View } from './core/api';
 import { Avatar, Empty, ErrorMessage } from './core/components';
+import { Logo } from './core/ui/Logo';
 import { Login } from './features/Login';
 import { Workspace } from './features/Workspace';
 import { Projects, MySpace, Heat, People } from './features/Pages';
@@ -77,17 +77,9 @@ function App() {
   return (
     <div className="app-shell">
       <aside className={`sidebar ${menu ? 'mobile-open' : ''}`}>
-        <a href="/" className="brand">
-          <Waypoints size={29} /> elo<span>operational hub</span>
+        <a href="/" className="brand" aria-label="CITi Hub — início">
+          <Logo variant="dark" />
         </a>
-        <div className="organization">
-          <div className="org-mark">EJ</div>
-          <div>
-            <strong>Nosso workspace</strong>
-            <small>Empresa Júnior</small>
-          </div>
-          <ChevronDown size={15} />
-        </div>
         <span className="nav-label">VISÃO GERAL</span>
         <nav aria-label="Navegação principal">
           {nav.map((item) => (
@@ -137,20 +129,17 @@ function App() {
             ))}
         </nav>
         <div className="sidebar-bottom">
-          <div className="continuity">
-            <span className="eyebrow">FEITO PARA CONTINUAR</span>
-            <p>
-              O time muda.
-              <br />
-              <strong>O conhecimento fica.</strong>
-            </p>
-            <span className="continuity-line" />
-          </div>
           <div className="user-profile">
             <Avatar name={user.name} />
             <div>
               <strong>{user.name}</strong>
-              <small>{user.role === 'ADMIN' ? 'Diretoria' : user.title}</small>
+              <small>
+                {user.role === 'ADMIN'
+                  ? 'Diretoria'
+                  : user.role === 'LEADER'
+                    ? `Liderança · ${user.area}`
+                    : `${user.area} · ${user.title}`}
+              </small>
             </div>
             <button
               aria-label="Sair da conta"
@@ -184,9 +173,6 @@ function App() {
                 : nav.find((n) => n.id === view)?.title}
             </strong>
           </div>
-          <span className="topbar-note">
-            <span className="online-dot" /> Construindo juntos
-          </span>
         </header>
         <main className="content">
           <ErrorMessage error={projects.error} />
@@ -198,12 +184,11 @@ function App() {
               <>
                 <div className="page-heading">
                   <div>
-                    <p className="eyebrow">SEU HUB OPERACIONAL</p>
-                    <h1>Conecte o próximo passo.</h1>
+                    <h1>Projetos</h1>
                   </div>
                 </div>
                 <Empty
-                  title="Vamos abrir espaço para o time"
+                  title="Nenhum projeto vinculado"
                   detail="Crie um projeto no catálogo ou peça à liderança para vincular sua conta."
                 />
                 <button className="primary" onClick={() => setView('projects')}>
@@ -216,12 +201,6 @@ function App() {
           {view === 'heat' && <Heat />}
           {view === 'people' && <People projects={projects.data ?? []} />}
         </main>
-        <footer className="app-footer">
-          <span>
-            <Waypoints size={15} /> elo · conexões que constroem
-          </span>
-          <span>Seu time. Um só movimento.</span>
-        </footer>
       </div>
     </div>
   );
