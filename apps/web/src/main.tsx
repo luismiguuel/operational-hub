@@ -19,7 +19,8 @@ import { Avatar, Empty, ErrorMessage } from './core/components';
 import { Logo } from './core/ui/Logo';
 import { Login } from './features/Login';
 import { Workspace } from './features/Workspace';
-import { Projects, MySpace, Heat, People } from './features/Pages';
+import { Projects, MySpace, Heat } from './features/Pages';
+import { People } from './features/People';
 import './styles.css';
 const client = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 10000 }, mutations: { retry: false } },
