@@ -18,7 +18,9 @@
     "test:integration": "pnpm --filter @hub/api test:integration",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "doctor": "node scripts/setup-dev.mjs doctor",
+    "setup": "node scripts/setup-dev.mjs setup"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

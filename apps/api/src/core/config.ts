@@ -1,6 +1,6 @@
 import { z } from 'zod';
 const optional = z.preprocess((v) => (v === '' ? undefined : v), z.string().optional());
-export const config = z
+const result = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     PORT: z.coerce.number().default(3001),
@@ -20,7 +20,16 @@ export const config = z
     AI_BASE_URL: z.string().url().default('https://api.openai.com/v1'),
     AI_MODEL: z.string().default('gpt-4.1-mini'),
   })
-  .parse(process.env);
+  .safeParse(process.env);
+if (!result.success) {
+  console.error(
+    'Configuração inválida: ' +
+      result.error.issues.map((issue) => issue.path.join('.')).join(', ') +
+      '. Execute pnpm setup ou copie .env.example para .env.',
+  );
+  process.exit(1);
+}
+export const config = result.data;
 if (
   config.NODE_ENV === 'production' &&
   (!config.COOKIE_SECURE || !config.WEB_ORIGIN.startsWith('https://'))

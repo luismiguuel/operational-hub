@@ -2,8 +2,21 @@ import argon2 from 'argon2';
 import { z } from 'zod';
 import { areas } from '@hub/shared';
 import { db, transaction } from '../core/db.js';
-const email = z.string().email().parse(process.env['SEED_ADMIN_EMAIL']).toLowerCase();
-const password = z.string().min(12).max(256).parse(process.env['SEED_ADMIN_PASSWORD']);
+const credentials = z
+  .object({
+    SEED_ADMIN_EMAIL: z.string().email(),
+    SEED_ADMIN_PASSWORD: z.string().min(12).max(256),
+  })
+  .safeParse(process.env);
+if (!credentials.success) {
+  console.error(
+    'Credenciais de seed inválidas. Execute pnpm run setup ou preencha SEED_ADMIN_EMAIL e SEED_ADMIN_PASSWORD (12+ caracteres) no .env.',
+  );
+  process.exit(1);
+}
+const email = credentials.data.SEED_ADMIN_EMAIL.toLowerCase();
+const password = credentials.data.SEED_ADMIN_PASSWORD;
+
 try {
   const hash = await argon2.hash(password, { type: argon2.argon2id });
   await transaction(async (client) => {
