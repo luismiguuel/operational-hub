@@ -25,12 +25,19 @@ export function useProjectRoom(projectId: string) {
           const message = wsServerSchema.parse(JSON.parse(String(event.data)));
           if (message.type === 'ready') {
             attempts = 0;
-            void client.invalidateQueries({ queryKey: ['tasks', projectId] });
           }
-          if (message.type === 'TaskStatusChanged') {
+          if (
+            message.type === 'ready' ||
+            message.type === 'TaskStatusChanged' ||
+            message.type === 'TaskCarriedOver' ||
+            message.type === 'SprintClosed'
+          ) {
             void client.invalidateQueries({ queryKey: ['tasks', projectId] });
             void client.invalidateQueries({ queryKey: ['mine'] });
             void client.invalidateQueries({ queryKey: ['heat'] });
+            void client.invalidateQueries({ queryKey: ['sprints', projectId] });
+            void client.invalidateQueries({ queryKey: ['metrics', projectId] });
+            void client.invalidateQueries({ queryKey: ['activity', projectId] });
           }
         } catch {
           /* Invalid payloads never enter application state. */

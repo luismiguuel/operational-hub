@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   DndContext,
@@ -20,8 +20,9 @@ import {
   sprintSchema,
   userSchema,
   aiJobSchema,
+  closeSprintSchema,
 } from '@hub/shared';
-import type { Project, Task, TaskStatus } from '@hub/shared';
+import type { CloseSprintInput, Project, Sprint, Task, TaskStatus } from '@hub/shared';
 import {
   Plus,
   Search,
@@ -685,14 +686,16 @@ function SprintRow({
   manager,
   projectId,
 }: {
-  sprint: z.infer<typeof sprintSchema>;
+  sprint: Sprint;
   manager: boolean;
   projectId: string;
 }) {
   const client = useQueryClient();
+  const [closing, setClosing] = useState(false);
+  const [feedback, setFeedback] = useState('');
   const mutation = useMutation({
-    mutationFn: (state: 'ACTIVE' | 'CLOSED') =>
-      api(`/projects/${projectId}/sprints/${sprint.id}`, sprintSchema, patch({ state })),
+    mutationFn: () =>
+      api(`/projects/${projectId}/sprints/${sprint.id}`, sprintSchema, patch({ state: 'ACTIVE' })),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ['sprints', projectId] });
     },
@@ -712,17 +715,251 @@ function SprintRow({
         <small>
           {dateLabel(sprint.startsOn)} — {dateLabel(sprint.endsOn)}
         </small>
+        {feedback && (
+          <p role="status" className="sprint-close-feedback">
+            {feedback}
+          </p>
+        )}
       </div>
       {manager && sprint.state !== 'CLOSED' && (
         <button
           className="secondary"
           disabled={mutation.isPending}
-          onClick={() => mutation.mutate(sprint.state === 'PLANNED' ? 'ACTIVE' : 'CLOSED')}
+          onClick={() => {
+            if (sprint.state === 'PLANNED') mutation.mutate();
+            else {
+              setFeedback('');
+              setClosing(true);
+            }
+          }}
         >
           {sprint.state === 'PLANNED' ? 'Iniciar e fechar escopo' : 'Encerrar sprint'}
         </button>
       )}
       <ErrorMessage error={mutation.error} />
+      {closing && (
+        <CloseSprintDialog
+          sprint={sprint}
+          projectId={projectId}
+          onClose={() => setClosing(false)}
+          onClosed={(destination) => {
+            setClosing(false);
+            setFeedback(`Sprint encerrada. Pendências enviadas para ${destination}.`);
+          }}
+        />
+      )}
     </article>
+  );
+}
+
+function CloseSprintDialog({
+  sprint,
+  projectId,
+  onClose,
+  onClosed,
+}: {
+  sprint: Sprint;
+  projectId: string;
+  onClose: () => void;
+  onClosed: (destination: string) => void;
+}) {
+  const client = useQueryClient();
+  const fieldId = useId();
+  const [action, setAction] = useState<CloseSprintInput['unfinishedAction']>('BACKLOG');
+  const [targetId, setTargetId] = useState('');
+  const tasks = useQuery({
+    queryKey: ['tasks', projectId],
+    queryFn: () => api(`/projects/${projectId}/tasks`, z.array(taskSchema)),
+    refetchOnMount: 'always',
+  });
+  const sprints = useQuery({
+    queryKey: ['sprints', projectId],
+    queryFn: () => api(`/projects/${projectId}/sprints`, z.array(sprintSchema)),
+    refetchOnMount: 'always',
+  });
+  const scope = (tasks.data ?? []).filter((task) => task.sprintId === sprint.id);
+  const work = scope.filter((task) => task.kind === 'TASK');
+  const done = work.filter((task) => task.status === 'DONE');
+  const pending = work.filter((task) => task.status !== 'DONE');
+  const hasPending = scope.some((task) => task.status !== 'DONE');
+  const planned = (sprints.data ?? []).filter(
+    (item) => item.state === 'PLANNED' && item.id !== sprint.id,
+  );
+  const target = planned.find((item) => item.id === targetId) ?? planned[0];
+  const loaded = tasks.isSuccess && sprints.isSuccess;
+  const refreshing = tasks.isFetching || sprints.isFetching;
+  const active = sprints.data?.find((item) => item.id === sprint.id)?.state === 'ACTIVE';
+  const mutation = useMutation({
+    mutationFn: (input: CloseSprintInput) =>
+      api(
+        `/projects/${projectId}/sprints/${sprint.id}`,
+        sprintSchema,
+        patch({ state: 'CLOSED', ...closeSprintSchema.parse(input) }),
+      ),
+    onSuccess: async (_result, input) => {
+      await Promise.all(
+        [
+          ['sprints', projectId],
+          ['tasks', projectId],
+          ['metrics', projectId],
+          ['activity', projectId],
+          ['mine'],
+          ['heat'],
+        ].map((queryKey) => client.invalidateQueries({ queryKey })),
+      );
+      onClosed(
+        input.unfinishedAction === 'BACKLOG'
+          ? 'o backlog'
+          : `a sprint ${target?.name ?? 'planejada'}`,
+      );
+    },
+  });
+  const busy = refreshing || mutation.isPending;
+  return (
+    <Modal
+      open
+      onOpenChange={(open) => {
+        if (!open && !mutation.isPending) onClose();
+      }}
+      title="Encerrar sprint"
+      description={`${sprint.name}: tarefas concluídas ficam nesta sprint. Itens pendentes mantêm seu status no destino escolhido.`}
+    >
+      <form
+        className="sprint-close-form"
+        aria-busy={busy}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!loaded || busy || !active || (hasPending && action === 'NEXT_SPRINT' && !target))
+            return;
+          mutation.mutate(
+            hasPending && action === 'NEXT_SPRINT'
+              ? { unfinishedAction: 'NEXT_SPRINT', targetSprintId: target?.id }
+              : { unfinishedAction: 'BACKLOG' },
+          );
+        }}
+      >
+        {!loaded ? (
+          <p role="status" className="muted">
+            Atualizando dados da sprint…
+          </p>
+        ) : (
+          <>
+            {refreshing && (
+              <p role="status" className="muted">
+                Atualizando dados da sprint…
+              </p>
+            )}
+            <dl className="sprint-close-summary">
+              <div>
+                <dt>Concluídas</dt>
+                <dd>
+                  {done.length} tarefas · {done.reduce((sum, task) => sum + task.points, 0)} pts
+                </dd>
+              </div>
+              <div>
+                <dt>Pendentes</dt>
+                <dd>
+                  {pending.length} tarefas · {pending.reduce((sum, task) => sum + task.points, 0)}{' '}
+                  pts
+                </dd>
+              </div>
+            </dl>
+            {scope.some((task) => task.kind === 'EPIC' && task.status !== 'DONE') && (
+              <p className="muted">
+                Épicos pendentes também serão movidos. Os totais acima contabilizam apenas tarefas.
+              </p>
+            )}
+            {!active && (
+              <p role="alert" className="error">
+                Esta sprint não está mais ativa. Feche este modal para consultar o estado atual.
+              </p>
+            )}
+            {hasPending ? (
+              <fieldset className="carryover-choices" disabled={busy || !active}>
+                <legend>Destino dos itens pendentes</legend>
+                <label className="carryover-option">
+                  <input
+                    type="radio"
+                    name={fieldId}
+                    value="BACKLOG"
+                    checked={action === 'BACKLOG'}
+                    onChange={() => setAction('BACKLOG')}
+                  />
+                  <span>Devolver ao Backlog</span>
+                </label>
+                <label className="carryover-option">
+                  <input
+                    type="radio"
+                    name={fieldId}
+                    value="NEXT_SPRINT"
+                    checked={action === 'NEXT_SPRINT'}
+                    disabled={!planned.length}
+                    aria-describedby={!planned.length ? `${fieldId}-note` : undefined}
+                    onChange={() => setAction('NEXT_SPRINT')}
+                  />
+                  <span>Mover para próxima Sprint Planejada</span>
+                </label>
+                {!planned.length && (
+                  <p id={`${fieldId}-note`} className="muted">
+                    Crie uma sprint planejada antes ou devolva os itens ao backlog.
+                  </p>
+                )}
+                {action === 'NEXT_SPRINT' && planned.length > 0 && (
+                  <label htmlFor={`${fieldId}-target`}>
+                    Sprint de destino
+                    <select
+                      id={`${fieldId}-target`}
+                      required
+                      value={target?.id ?? ''}
+                      onChange={(event) => setTargetId(event.target.value)}
+                    >
+                      {planned.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </fieldset>
+            ) : (
+              <p className="muted">Nenhum item pendente. A sprint pode ser encerrada.</p>
+            )}
+          </>
+        )}
+        <ErrorMessage error={tasks.error ?? sprints.error ?? mutation.error} />
+        {(tasks.isError || sprints.isError) && (
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              void tasks.refetch();
+              void sprints.refetch();
+            }}
+          >
+            Tentar novamente
+          </button>
+        )}
+        <div className="sprint-close-actions">
+          <button
+            type="button"
+            className="secondary"
+            disabled={mutation.isPending}
+            onClick={onClose}
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="primary"
+            disabled={
+              !loaded || busy || !active || (hasPending && action === 'NEXT_SPRINT' && !target)
+            }
+          >
+            {mutation.isPending ? 'Encerrando…' : 'Confirmar encerramento'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }

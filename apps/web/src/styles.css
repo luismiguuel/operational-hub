@@ -2656,3 +2656,88 @@ body,
     height: 48px;
   }
 }
+
+.sprint-close-form {
+  display: grid;
+  gap: 16px;
+  color: var(--text-primary);
+}
+.sprint-close-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.sprint-close-summary > div {
+  padding: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-card);
+  background: var(--bg-surface-elevated);
+}
+.sprint-close-summary dt {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+.sprint-close-summary dd {
+  margin: 8px 0 0;
+  font-weight: 600;
+}
+.carryover-choices {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.carryover-choices legend {
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+.carryover-choices .carryover-option {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 16px;
+  min-height: 48px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-card);
+  background: var(--bg-surface-elevated);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.carryover-option:hover {
+  background: var(--bg-surface-hover);
+}
+.carryover-option:has(input:checked) {
+  background: var(--accent-surface);
+  border-color: var(--accent-primary);
+}
+.carryover-option:has(input:focus-visible) {
+  box-shadow: var(--focus-ring);
+}
+.carryover-option:has(input:disabled) {
+  color: var(--text-secondary);
+  cursor: not-allowed;
+}
+.carryover-option input[type='radio'] {
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  flex: 0 0 16px;
+  padding: 0;
+  margin: 0;
+  accent-color: var(--accent-primary);
+}
+.sprint-close-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.sprint-close-feedback {
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
