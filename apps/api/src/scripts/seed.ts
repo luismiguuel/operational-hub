@@ -20,6 +20,77 @@ const password = credentials.data.SEED_ADMIN_PASSWORD;
 try {
   const hash = await argon2.hash(password, { type: argon2.argon2id });
   await transaction(async (client) => {
+    const taxonomy = [
+      {
+        id: '10000000-0000-4000-8000-000000000001',
+        name: 'Tech',
+        slug: 'tech',
+        description: 'Tecnologia e dados',
+        subareas: ['Dev', 'Dados'],
+      },
+      {
+        id: '10000000-0000-4000-8000-000000000002',
+        name: 'Produto',
+        slug: 'produto',
+        description: 'Produto e experiência',
+        subareas: ['Design/UX', 'Product Management'],
+      },
+      {
+        id: '10000000-0000-4000-8000-000000000003',
+        name: 'Gente e Gestão',
+        slug: 'gente-e-gestao',
+        description: 'Pessoas e operação',
+        subareas: [],
+      },
+      {
+        id: '10000000-0000-4000-8000-000000000004',
+        name: 'Negócios',
+        slug: 'negocios',
+        description: 'Marketing e comercial',
+        subareas: ['Marketing', 'Comercial'],
+      },
+    ];
+    for (const area of taxonomy) {
+      await client.query(
+        'INSERT INTO org_areas(id,name,slug,description) VALUES($1,$2,$3,$4) ON CONFLICT(slug) DO NOTHING',
+        [area.id, area.name, area.slug, area.description],
+      );
+      const areaRow = await client.query<{ id: string }>('SELECT id FROM org_areas WHERE slug=$1', [
+        area.slug,
+      ]);
+      for (const name of area.subareas) {
+        const slug = `${area.slug}-${name
+          .normalize('NFD')
+          .replace(/[\\u0300-\\u036f]/g, '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')}`;
+        await client.query(
+          'INSERT INTO org_subareas(id,area_id,name,slug) VALUES($1,$2,$3,$4) ON CONFLICT(slug) DO NOTHING',
+          [crypto.randomUUID(), areaRow.rows[0]?.id, name, slug],
+        );
+      }
+    }
+    for (const [index, name] of [
+      'Diretoria',
+      'Liderança de Projeto',
+      'Consultor',
+      'Desenvolvedor',
+      'Designer',
+      'Analista de Dados',
+    ].entries()) {
+      const slug = [
+        'diretoria',
+        'lideranca-de-projeto',
+        'consultor',
+        'desenvolvedor',
+        'designer',
+        'analista-de-dados',
+      ][index];
+      await client.query(
+        'INSERT INTO org_roles(id,name,slug) VALUES($1,$2,$3) ON CONFLICT(slug) DO NOTHING',
+        [crypto.randomUUID(), name, slug],
+      );
+    }
     for (const [area, subareas] of Object.entries(areas))
       await client.query('INSERT INTO areas(name,subareas) VALUES($1,$2) ON CONFLICT DO NOTHING', [
         area,
