@@ -120,6 +120,17 @@ export const sprintSchema = sprintInput
   .innerType()
   .extend({ id, projectId: id, state: z.enum(['PLANNED', 'ACTIVE', 'CLOSED']) });
 export type Sprint = z.infer<typeof sprintSchema>;
+export const closeSprintSchema = z
+  .object({
+    unfinishedAction: z.enum(['BACKLOG', 'NEXT_SPRINT']).default('BACKLOG'),
+    targetSprintId: id.optional(),
+  })
+  .strict()
+  .refine((input) => input.unfinishedAction !== 'NEXT_SPRINT' || input.targetSprintId, {
+    message: 'Informe a sprint planejada de destino.',
+    path: ['targetSprintId'],
+  });
+export type CloseSprintInput = z.infer<typeof closeSprintSchema>;
 export const commentSchema = z.object({
   id,
   taskId: id,
