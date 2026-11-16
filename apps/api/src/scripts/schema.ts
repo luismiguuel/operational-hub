@@ -4,12 +4,22 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE TABLE areas (name text PRIMARY KEY, subareas jsonb NOT NULL);
 CREATE TABLE users (
  id uuid PRIMARY KEY, name text NOT NULL, email text UNIQUE NOT NULL, role text NOT NULL CHECK(role IN ('ADMIN','LEADER','MEMBER')),
- area text NOT NULL REFERENCES areas(name), subarea text, title text NOT NULL,
+ area text NOT NULL, subarea text, title text NOT NULL,
  weekly_hours integer NOT NULL CHECK(weekly_hours BETWEEN 1 AND 40), active boolean NOT NULL DEFAULT true,
- password_hash text, google_sub text UNIQUE,
- CHECK((area='Tech' AND (subarea IS NULL OR subarea IN ('Dev','Dados'))) OR
- (area='Produto' AND (subarea IS NULL OR subarea IN ('Design/UX','Product Management'))) OR
- (area='Gente e Gestão' AND subarea IS NULL) OR (area='Negócios' AND (subarea IS NULL OR subarea IN ('Marketing','Comercial'))))
+ is_active boolean NOT NULL DEFAULT true, deactivated_at timestamptz,
+ password_hash text, google_sub text UNIQUE
+);
+CREATE TABLE org_areas (
+ id uuid PRIMARY KEY, name text NOT NULL UNIQUE, slug text NOT NULL UNIQUE, description text NOT NULL DEFAULT '',
+ is_active boolean NOT NULL DEFAULT true, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE org_subareas (
+ id uuid PRIMARY KEY, area_id uuid NOT NULL REFERENCES org_areas(id), name text NOT NULL, slug text NOT NULL UNIQUE,
+ is_active boolean NOT NULL DEFAULT true, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(), UNIQUE(area_id,name)
+);
+CREATE TABLE org_roles (
+ id uuid PRIMARY KEY, name text NOT NULL UNIQUE, slug text NOT NULL UNIQUE, is_active boolean NOT NULL DEFAULT true,
+ created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE TABLE projects (id uuid PRIMARY KEY, name text NOT NULL, description text NOT NULL, kind text NOT NULL CHECK(kind IN ('EXTERNAL','INTERNAL')),archived boolean NOT NULL DEFAULT false);
 CREATE TABLE allocations (project_id uuid REFERENCES projects(id),user_id uuid REFERENCES users(id),role text NOT NULL CHECK(role IN ('LEADER','MEMBER')),weekly_hours integer NOT NULL CHECK(weekly_hours BETWEEN 1 AND 40), PRIMARY KEY(project_id,user_id));

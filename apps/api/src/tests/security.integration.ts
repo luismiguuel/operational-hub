@@ -13,6 +13,8 @@ import {
   sprintSchema,
   eventSchema,
   wsServerSchema,
+  id,
+  userSchema,
 } from '@hub/shared';
 import { schema } from '../scripts/schema.js';
 // A fresh, randomly named database is created and dropped. The configured DB is never modified.
@@ -45,6 +47,31 @@ before(async () => {
   await db.query(schema);
   for (const [area, subareas] of Object.entries(areas))
     await db.query('INSERT INTO areas VALUES($1,$2)', [area, JSON.stringify(subareas)]);
+  const orgAreas = [
+    ['10000000-0000-4000-8000-000000000001', 'Tech', 'tech'],
+    ['10000000-0000-4000-8000-000000000002', 'Produto', 'produto'],
+    ['10000000-0000-4000-8000-000000000003', 'Gente e Gestão', 'gente-e-gestao'],
+    ['10000000-0000-4000-8000-000000000004', 'Negócios', 'negocios'],
+  ];
+  for (const [id, name, slug] of orgAreas)
+    await db.query('INSERT INTO org_areas(id,name,slug) VALUES($1,$2,$3)', [id, name, slug]);
+  for (const [id, areaId, name, slug] of [
+    ['20000000-0000-4000-8000-000000000001', orgAreas[0]?.[0], 'Dev', 'tech-dev'],
+    ['20000000-0000-4000-8000-000000000002', orgAreas[0]?.[0], 'Dados', 'tech-dados'],
+    ['20000000-0000-4000-8000-000000000003', orgAreas[1]?.[0], 'Design/UX', 'produto-design-ux'],
+  ])
+    await db.query('INSERT INTO org_subareas(id,area_id,name,slug) VALUES($1,$2,$3,$4)', [
+      id,
+      areaId,
+      name,
+      slug,
+    ]);
+  for (const [id, name, slug] of [
+    ['30000000-0000-4000-8000-000000000001', 'Diretoria', 'diretoria'],
+    ['30000000-0000-4000-8000-000000000002', 'Liderança de Projeto', 'lideranca-de-projeto'],
+    ['30000000-0000-4000-8000-000000000003', 'Consultor', 'consultor'],
+  ])
+    await db.query('INSERT INTO org_roles(id,name,slug) VALUES($1,$2,$3)', [id, name, slug]);
   const hash = await argon2.hash('integration-secret-password', { type: argon2.argon2id });
   for (const [userId, role] of [
     [adminId, 'ADMIN'],
@@ -548,4 +575,164 @@ test('encerramento sem pendências usa BACKLOG por padrão e entrega SprintClose
   } finally {
     ws.terminate();
   }
+});
+
+test('taxonomia organizacional permite gestão apenas para ADMIN e audita mutações', async () => {
+  for (const token of [memberToken, outsiderToken]) {
+    assert.equal(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/v1/org/areas',
+          headers: headers(token),
+          payload: { name: 'Pesquisa', slug: 'pesquisa' },
+        })
+      ).statusCode,
+      403,
+    );
+  }
+  const createdArea = await app.inject({
+    method: 'POST',
+    url: '/api/v1/org/areas',
+    headers: headers(adminToken),
+    payload: { name: 'Pesquisa', slug: 'pesquisa', description: 'Pesquisa aplicada' },
+  });
+  assert.equal(createdArea.statusCode, 201, createdArea.body);
+  const areaId = z.object({ id }).parse(createdArea.json()).id;
+  const createdSubarea = await app.inject({
+    method: 'POST',
+    url: '/api/v1/org/subareas',
+    headers: headers(adminToken),
+    payload: { areaId, name: 'Pesquisa de Produto', slug: 'pesquisa-de-produto' },
+  });
+  assert.equal(createdSubarea.statusCode, 201, createdSubarea.body);
+  const subareaId = z.object({ id }).parse(createdSubarea.json()).id;
+  const createdRole = await app.inject({
+    method: 'POST',
+    url: '/api/v1/org/roles',
+    headers: headers(adminToken),
+    payload: { name: 'Pesquisador', slug: 'pesquisador' },
+  });
+  assert.equal(createdRole.statusCode, 201, createdRole.body);
+  const roleId = z.object({ id }).parse(createdRole.json()).id;
+  for (const [path, resourceId] of [
+    ['areas', areaId],
+    ['subareas', subareaId],
+    ['roles', roleId],
+  ]) {
+    const response = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/org/${path}/${resourceId}`,
+      headers: headers(adminToken),
+      payload: { isActive: false },
+    });
+    assert.equal(response.statusCode, 200, response.body);
+  }
+  const taxonomy = await app.inject({ url: '/api/v1/org/taxonomy', headers: headers(memberToken) });
+  assert.equal(taxonomy.statusCode, 200, taxonomy.body);
+  const auditRows = await db.query(
+    "SELECT id FROM audit_log WHERE action LIKE 'org.%' AND resource_id=$1",
+    [areaId],
+  );
+  assert.ok((auditRows.rowCount ?? 0) >= 2);
+  const events = await db.query<{ payload: unknown }>(
+    "SELECT payload FROM outbox WHERE payload->>'type'='OrgManagementChanged'",
+  );
+  assert.ok(events.rows.length >= 6);
+});
+
+test('desativação mantém histórico, bloqueia sessões e protege a última conta ADMIN', async () => {
+  const forbidden = await app.inject({
+    method: 'PATCH',
+    url: `/api/v1/users/${adminId}/admin`,
+    headers: headers(adminToken),
+    payload: {
+      area: 'Tech',
+      subarea: 'Dev',
+      role: 'Consultor',
+      systemRole: 'MEMBER',
+      weeklyCapacityHours: 16,
+      isActive: false,
+    },
+  });
+  assert.equal(forbidden.statusCode, 409);
+  const taskCount = await db.query<{ count: number }>(
+    'SELECT count(*)::int AS count FROM tasks WHERE assignee_id=$1',
+    [memberId],
+  );
+  assert.ok(Number(taskCount.rows[0]?.['count']) > 0);
+  const update = await app.inject({
+    method: 'PATCH',
+    url: `/api/v1/users/${memberId}/admin`,
+    headers: headers(adminToken),
+    payload: {
+      area: 'Tech',
+      subarea: 'Dev',
+      role: 'Consultor',
+      systemRole: 'MEMBER',
+      weeklyCapacityHours: 16,
+      isActive: false,
+    },
+  });
+  assert.equal(update.statusCode, 200, update.body);
+  assert.equal(userSchema.parse(update.json()).active, false);
+  assert.equal(
+    (await db.query('SELECT id FROM tasks WHERE assignee_id=$1', [memberId])).rowCount,
+    taskCount.rows[0]?.['count'],
+  );
+  assert.equal(
+    (
+      await app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/login',
+        headers: { origin },
+        payload: { email: `${memberId}@example.org`, password: 'integration-secret-password' },
+      })
+    ).statusCode,
+    401,
+  );
+  assert.equal(
+    (await app.inject({ url: '/api/v1/users', headers: headers(memberToken) })).statusCode,
+    401,
+  );
+  assert.ok(
+    (
+      await db.query(
+        "SELECT id FROM audit_log WHERE action='user.admin_updated' AND resource_id=$1",
+        [memberId],
+      )
+    ).rowCount,
+  );
+});
+
+test('provisionamento em lote relata emails repetidos e grava auditoria', async () => {
+  const member = {
+    name: 'Pessoa em lote',
+    email: 'batch@example.org',
+    area: 'Tech',
+    subarea: 'Dev',
+    role: 'Consultor',
+    systemRole: 'MEMBER',
+    weeklyCapacityHours: 12,
+  };
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/users/bulk-provision',
+    headers: headers(adminToken),
+    payload: { members: [member, member] },
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  assert.deepEqual(response.json(), {
+    created: ['batch@example.org'],
+    existing: ['batch@example.org'],
+    createdCount: 1,
+    existingCount: 1,
+  });
+  assert.ok(
+    (await db.query("SELECT id FROM audit_log WHERE action='user.bulk_provisioned'")).rowCount,
+  );
+  assert.ok(
+    (await db.query("SELECT id FROM outbox WHERE payload->>'resourceType'='BULK_PROVISION'"))
+      .rowCount,
+  );
 });
