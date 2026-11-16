@@ -140,7 +140,7 @@ export const commentSchema = z.object({
   createdAt: z.string(),
 });
 export const commentInput = z.object({ body: z.string().trim().min(1).max(5000) }).strict();
-export const eventSchema = z.object({
+const taskStatusChangedSchema = z.object({
   id,
   type: z.literal('TaskStatusChanged'),
   projectId: id,
@@ -150,12 +150,36 @@ export const eventSchema = z.object({
   to: statusSchema,
   occurredAt: z.string().datetime(),
 });
+const sprintEventBase = z.object({
+  id,
+  projectId: id,
+  sprintId: id,
+  actorId: id,
+  occurredAt: z.string().datetime(),
+});
+export const eventSchema = z.discriminatedUnion('type', [
+  taskStatusChangedSchema,
+  sprintEventBase.extend({
+    type: z.literal('TaskCarriedOver'),
+    taskId: id,
+    targetSprintId: id.nullable(),
+  }),
+  sprintEventBase.extend({
+    type: z.literal('SprintClosed'),
+    unfinishedAction: z.enum(['BACKLOG', 'NEXT_SPRINT']),
+    targetSprintId: id.nullable(),
+    doneCount: z.number().int().nonnegative(),
+    donePoints: z.number().int().nonnegative(),
+    carryoverCount: z.number().int().nonnegative(),
+    carryoverPoints: z.number().int().nonnegative(),
+  }),
+]);
 export type DomainEvent = z.infer<typeof eventSchema>;
 export const wsClientSchema = z
   .object({ type: z.literal('authenticate'), accessToken: z.string().min(1) })
   .strict();
 export const wsServerSchema = z.discriminatedUnion('type', [
-  eventSchema,
+  ...eventSchema.options,
   z.object({ type: z.literal('ready'), projectId: id }),
   z.object({ type: z.literal('error'), message: z.string() }),
 ]);

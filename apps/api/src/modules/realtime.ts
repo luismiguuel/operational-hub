@@ -76,7 +76,7 @@ export async function realtimeRoutes(app: FastifyInstance): Promise<void> {
               () => socket.close(1008, 'Token expirado'),
               Math.max(0, claims.exp * 1000 - Date.now()),
             );
-            unsubscribe = bus.on('TaskStatusChanged', (event) => {
+            unsubscribe = bus.onEvent((event) => {
               if (event.projectId !== projectId) return;
               // Revalidate each delivery, so revoked allocations never keep room access.
               void (async () => {

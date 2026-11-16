@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   allocationInput,
   closeSprintSchema,
+  eventSchema,
   id,
   projectInput,
   projectSchema,
@@ -125,10 +126,9 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
       .parse(request.body);
     const close =
       body.state === 'CLOSED'
-        ? closeSprintSchema.parse({
-            unfinishedAction: body.unfinishedAction,
-            targetSprintId: body.targetSprintId,
-          })
+        ? closeSprintSchema.parse(
+            Object.fromEntries(Object.entries(body).filter(([key]) => key !== 'state')),
+          )
         : null;
     return transaction(async (client) => {
       await projectAccess(request.actor, projectId, true, client);
@@ -181,30 +181,24 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
         moved = summary.open_count;
         movedPoints = summary.open_points;
         const destination = close.unfinishedAction === 'BACKLOG' ? null : close.targetSprintId;
-        const tasks = await client.query<{ id: string; status: string }>(
-          "UPDATE tasks SET sprint_id=$3, version=version+1, updated_at=now() WHERE project_id=$1 AND sprint_id=$2 AND status<>'DONE' RETURNING id,status",
+        const tasks = await client.query<{ id: string }>(
+          "UPDATE tasks SET sprint_id=$3, version=version+1, updated_at=now() WHERE project_id=$1 AND sprint_id=$2 AND status<>'DONE' RETURNING id",
           [projectId, sprintId, destination],
         );
         for (const task of tasks.rows) {
-          const event = {
+          const event = eventSchema.parse({
             id: crypto.randomUUID(),
-            type: 'TaskStatusChanged',
+            type: 'TaskCarriedOver',
+            sprintId,
+            targetSprintId: destination,
             projectId,
             taskId: task.id,
             actorId: request.actor.id,
-            from: task.status,
-            to: task.status,
             occurredAt: new Date().toISOString(),
-          };
+          });
           await client.query(
             'INSERT INTO activity_log(id,project_id,actor_id,action,payload) VALUES($1,$2,$3,$4,$5)',
-            [
-              event.id,
-              projectId,
-              request.actor.id,
-              'sprint.carryover',
-              JSON.stringify({ ...event, fromSprintId: sprintId, toSprintId: destination }),
-            ],
+            [event.id, projectId, request.actor.id, 'sprint.carryover', JSON.stringify(event)],
           );
           await client.query('INSERT INTO outbox(id,payload) VALUES($1,$2)', [
             event.id,
@@ -224,10 +218,27 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
             donePoints,
             carryoverCount: moved,
             carryoverPoints: movedPoints,
-            destination: close.unfinishedAction,
+            unfinishedAction: close.unfinishedAction,
+            targetSprintId: close.unfinishedAction === 'NEXT_SPRINT' ? close.targetSprintId : null,
           }
         : { from: previous.state, to: body.state };
       await audit(client, request.actor.id, 'sprint.state_changed', sprintId, auditPayload);
+      if (close) {
+        const event = eventSchema.parse({
+          ...auditPayload,
+          id: crypto.randomUUID(),
+          type: 'SprintClosed',
+          sprintId,
+          projectId,
+          actorId: request.actor.id,
+          occurredAt: new Date().toISOString(),
+        });
+        await client.query('INSERT INTO outbox(id,payload) VALUES($1,$2)', [
+          event.id,
+          JSON.stringify(event),
+        ]);
+      }
+
       return sprintSchema.parse(row.rows[0]);
     });
   });

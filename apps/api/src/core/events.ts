@@ -14,6 +14,13 @@ export class DomainBus {
   }
   publish(event: DomainEvent): void {
     this.emitter.emit(event.type, event);
+    this.emitter.emit('project-event', event);
+  }
+  onEvent(handler: (event: DomainEvent) => void): () => void {
+    this.emitter.on('project-event', handler);
+    return () => {
+      this.emitter.off('project-event', handler);
+    };
   }
 }
 export const bus = new DomainBus();
