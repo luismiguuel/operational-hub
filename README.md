@@ -2,35 +2,33 @@
 
 Fundação de um sistema de gestão para Empresas Juniores. Monorepo TypeScript estrito, ESM, monólito modular com eventos e SPA React. A marca **CITi Hub** e os grafismos são placeholders originais; a apresentação usa a skill [citi-visual-language](.agents/skills/citi-visual-language/SKILL.md).
 
-## Executar localmente
+## Início Rápido (1 Comando)
 
-Requisitos: Node **20.19+** (recomendado 22 LTS), Docker Compose e pnpm **10.32.1**. Se o `pnpm` global for incompatível com seu Node, use `npx --yes pnpm@10` em seu lugar.
+Requisitos: Node **>=22.13.0**, pnpm **10.32.1**, Docker e Docker Compose.
+Após clonar e instalar as dependências:
 
 ```bash
+nvm install 22
+nvm use
 corepack enable
 corepack prepare pnpm@10.32.1 --activate
 pnpm install --frozen-lockfile
-cp .env.example .env
-```
-
-Edite `.env`: defina `JWT_SECRET` aleatório com pelo menos 32 caracteres e `SEED_ADMIN_PASSWORD` com pelo menos 12. O administrador inicial usa `SEED_ADMIN_EMAIL`. Para explorar dados **explicitamente ilustrativos**, escolha `SEED_DEMO=true` **antes do primeiro seed**. Não há senha padrão nem cadastro público. O seed preserva contas existentes; não é uma ferramenta de reset de senha.
-
-```bash
-docker compose up -d --wait
-pnpm db:migrate
-pnpm db:seed
+pnpm run setup
 pnpm dev
 ```
 
-Abra <http://localhost:5173>. Em outro terminal:
+Use `pnpm run setup` e `pnpm run doctor` explicitamente: `pnpm setup` e `pnpm doctor` podem executar comandos internos do próprio pnpm.
+O setup preserva `.env` existente, inicia o Compose (`compose.yaml`), aplica migrações e executa o seed idempotente. O exemplo contém credenciais ilustrativas locais; substitua segredos e senhas em produção. Contas existentes preservam suas senhas. Os dados demo só são criados junto de um administrador novo.
 
-```bash
-pnpm worker
-```
+Abra <http://localhost:5173>. Em outro terminal, com Node 22 ativo, execute `pnpm worker` para publicar eventos e processar IA. O worker sozinho não inicia o site.
 
-Em instalações existentes, execute `pnpm db:migrate` antes de atualizar a API para adicionar a coluna `sprints.closed_at` de forma idempotente.
-
-O worker publica a outbox e processa resumos de IA. A API usa a porta de `PORT` (padrão 3001); o proxy Vite lê a mesma configuração. Se 5432 estiver ocupada, altere **POSTGRES_PORT e DATABASE_URL** juntos. Para Redis, ajuste **REDIS_PORT e REDIS_URL**. Neste workspace, a configuração local usa PostgreSQL **55432** e API **3301**, pois as portas padrão já estavam ocupadas. O `.env` local, ignorado pelo Git, já foi preparado com senha aleatória e dados demonstrativos.
+| Problema                    | Solução                                                                                                      |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Node antigo / `node:sqlite` | Execute `nvm install 22 && nvm use` em cada terminal.                                                        |
+| Docker parado               | Inicie o Docker e repita `pnpm run setup`.                                                                   |
+| `.env` ausente              | Execute `pnpm run setup`.                                                                                    |
+| Porta ocupada               | Pare o processo anterior; para PostgreSQL/Redis, altere a porta do Compose e a URL correspondente no `.env`. |
+| Site indisponível           | Execute `pnpm dev`; mantenha o terminal aberto.                                                              |
 
 ## Entrega desta fundação
 
