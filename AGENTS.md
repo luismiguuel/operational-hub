@@ -1,6 +1,7 @@
 # Regras do CITi Hub
 
 ## Identidade visual e UI/UX (`apps/web`)
+
 Antes de criar ou editar qualquer tela, modal, componente ou estilo no frontend, leia integralmente e siga:
 
 - `.agents/skills/citi-visual-language/SKILL.md`

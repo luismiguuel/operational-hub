@@ -28,6 +28,8 @@ Abra <http://localhost:5173>. Em outro terminal:
 pnpm worker
 ```
 
+Em instalações existentes, execute `pnpm db:migrate` antes de atualizar a API para adicionar a coluna `sprints.closed_at` de forma idempotente.
+
 O worker publica a outbox e processa resumos de IA. A API usa a porta de `PORT` (padrão 3001); o proxy Vite lê a mesma configuração. Se 5432 estiver ocupada, altere **POSTGRES_PORT e DATABASE_URL** juntos. Para Redis, ajuste **REDIS_PORT e REDIS_URL**. Neste workspace, a configuração local usa PostgreSQL **55432** e API **3301**, pois as portas padrão já estavam ocupadas. O `.env` local, ignorado pelo Git, já foi preparado com senha aleatória e dados demonstrativos.
 
 ## Entrega desta fundação
@@ -35,7 +37,7 @@ O worker publica a outbox e processa resumos de IA. A API usa a porta de `PORT` 
 - Diretório de pessoas com área, subárea, cargo, capacidade semanal e papel de sistema independente da área. Criação/edição pela diretoria; ativação/desativação via API.
 - Catálogo externo/interno, criação, arquivamento/reativação e alocações contextuais com horas planejadas.
 - Épicos e tarefas, backlog por `sprintId=null`, prioridades, pontos Fibonacci, tags, Markdown sanitizado, responsável único opcional no planejamento, checklist, links HTTPS e comentários.
-- Sprints planejadas/ativas/encerradas. Planeje o escopo **antes** de iniciar. Apenas uma sprint ativa por projeto. Inclusão, remoção e alteração de pontos/épico/tipo são bloqueadas após o início. Encerre após concluir as tarefas; carryover e reabertura são evoluções futuras.
+- Sprints planejadas/ativas/encerradas. Planeje o escopo **antes** de iniciar. Apenas uma sprint ativa por projeto. Inclusão, remoção e alteração de pontos/épico/tipo são bloqueadas após o início. Ao encerrar, devolva itens pendentes ao backlog (padrão) ou mova-os para uma sprint planejada do mesmo projeto. O status das tarefas é preservado, a versão é incrementada e a sprint recebe `closed_at`. Tarefas concluídas permanecem na sprint original; a velocidade considera apenas seus story points. Reabertura permanece fora desta entrega.
 - Kanban com `@dnd-kit`, atualizações otimistas, rollback em erro, concorrência por versão e seletor de status acessível por teclado.
 - Meu Espaço, mapa de alocação, totais de entrega e velocidade das últimas seis sprints encerradas. Horas e story points permanecem medidas independentes.
 - OAuth Google Workspace com PKCE, state, nonce, validação OIDC e vínculo apenas a usuários previamente provisionados; login local Argon2id para o administrador inicial.

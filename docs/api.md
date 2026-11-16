@@ -25,7 +25,7 @@ Base `/api/v1`. Schemas e DTOs vivem em `packages/shared/src/index.ts`. Todas as
 | PUT `/projects/:projectId/allocations`                  | Upsert de vínculo/horas; líder contextual/admin                                                |
 | GET `/projects/:projectId/sprints`                      | Ciclos do projeto                                                                              |
 | POST `/projects/:projectId/sprints`                     | Criar planejada; líder contextual/admin                                                        |
-| PATCH `/projects/:projectId/sprints/:sprintId`          | `{state: 'ACTIVE' \| 'CLOSED'}`; líder contextual/admin                                        |
+| PATCH `/projects/:projectId/sprints/:sprintId`          | `{state: 'ACTIVE' \| 'CLOSED'}`; carryover abaixo; líder contextual/admin                      |
 | GET `/projects/:projectId/tasks`                        | Tarefas e épicos do projeto                                                                    |
 | POST `/projects/:projectId/tasks`                       | Membro cria tarefa própria no backlog; líder/admin pode atribuir e selecionar sprint planejada |
 | PATCH `/projects/:projectId/tasks/:taskId`              | Patch com `version` obrigatório; membro limitado a execução de cards próprios                  |
@@ -48,3 +48,5 @@ const changes = { status: 'IN_PROGRESS', version: task.version };
 ```
 
 Conexão WebSocket recebe `{type: 'authenticate', accessToken}` e responde `{type: 'ready', projectId}`. Eventos `TaskStatusChanged` contêm id, projectId, taskId, actorId, from, to e occurredAt. Trate id como chave de deduplicação caso adicione consumidores com efeitos colaterais.
+
+No encerramento (`state: 'CLOSED'`), o PATCH de sprint aceita `unfinishedAction: 'BACKLOG' | 'NEXT_SPRINT'` (padrão `BACKLOG`) e `targetSprintId`, obrigatório para `NEXT_SPRINT`. O destino deve estar planejado no mesmo projeto. Sprint inválida retorna 400 ou 404; transição inválida retorna 409.

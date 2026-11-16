@@ -41,11 +41,21 @@ Um projeto desconhecido ou sem vínculo retorna 404, evitando confirmar existên
 
 Mutações no workspace serializam pelo registro do projeto e bloqueiam tarefas/sprints durante a transação. É uma escolha conservadora para a escala de uma EJ. `version` permite rejeitar atualizações baseadas em estado antigo com 409. A SPA cancela queries em andamento antes do update otimista e restaura o snapshot em caso de erro.
 
-Sprint planejada aceita mudanças. Após iniciar, a composição, pontos e hierarquia do escopo ficam congelados. Status e conteúdo continuam editáveis durante a execução; sprint encerrada não aceita alterações de tarefas. Esta primeira versão exige conclusão das tarefas antes do encerramento e não implementa carryover. Projeto arquivado fica para leitura.
+Sprint planejada aceita mudanças. Após iniciar, a composição, pontos e hierarquia do escopo ficam congelados. Status e conteúdo continuam editáveis durante a execução; sprint encerrada não aceita alterações de tarefas. O encerramento de uma sprint ativa permite carryover para o backlog ou para uma sprint `PLANNED` do mesmo projeto. A diretoria (`ADMIN`) ou liderança contextual confirma o destino em um modal com contagens e pontos de tarefas concluídas e pendentes. Projeto arquivado fica para leitura.
 
 A alteração de status grava tarefa, atividade, auditoria e `TaskStatusChanged` na outbox **na mesma transação**. O worker busca lotes com `FOR UPDATE SKIP LOCKED`, publica em Redis e marca o envio. Uma falha após publicar e antes de confirmar pode duplicar o evento: a entrega é **pelo menos uma vez**, não exatamente uma vez. Clientes invalidam queries, uma operação idempotente. Redis Pub/Sub não retém eventos para clientes desconectados; a reconexão e o polling refazem a leitura autoritativa. O worker deve estar ativo para publicação da outbox.
 
 O cache do mapa dura 15 segundos, é separado por usuário, conjunto atual de projetos autorizados e revisão. Validação do escopo ocorre antes de ler o cache. Alterações de status incrementam a revisão; alterações de capacidade/alocação convergem pelo TTL. WebSockets revalidam conta e vínculo por entrega e fecham na expiração do access token; reconexões usam backoff e refresh.
+
+### Encerramento com carryover
+
+O `PATCH /api/v1/projects/:projectId/sprints/:sprintId` preserva o contrato de transição `{ state: 'CLOSED' }`. O payload pode incluir `unfinishedAction: 'BACKLOG' | 'NEXT_SPRINT'` (padrão `BACKLOG`) e `targetSprintId`, obrigatório para `NEXT_SPRINT`. Destinos inexistentes ou de outro projeto retornam 404; destinos que não estejam planejados retornam 400. A origem precisa estar ativa; transições repetidas ou inválidas retornam 409.
+
+Uma única transação, serializada pela trava da linha do projeto, valida origem e destino, move todos os itens não concluídos (incluindo épicos) e incrementa `version` e `updated_at`. Cada item movido recebe um registro `TaskCarriedOver` no histórico, com sprint de origem e destino. A sprint passa para `CLOSED` com `closed_at = NOW()`. A auditoria imutável registra destino, contagens e pontos concluídos e transferidos; os totais de pontos e tarefas excluem épicos para evitar dupla contagem.
+
+A mesma transação grava eventos `TaskCarriedOver` e `SprintClosed` na outbox. O evento de encerramento é emitido mesmo sem pendências. O worker publica os eventos para a sala autorizada do projeto; o cliente invalida tarefas (Kanban/backlog), sprints, métricas e visões operacionais, inclusive após reconexão. Falhas antes do commit desfazem a transferência, o encerramento e os registros.
+
+As tarefas `DONE` permanecem vinculadas à sprint encerrada e não aceitam edição. A velocidade das últimas seis sprints encerradas soma exclusivamente os pontos dessas tarefas, preservando a entrega histórica mesmo que itens transferidos sejam concluídos em ciclos posteriores. A migração existente adiciona `sprints.closed_at` também a bancos já provisionados; execute `pnpm db:migrate` antes de atualizar a API. Reabertura de sprint continua fora do escopo.
 
 ## Autenticação e conteúdo
 
@@ -66,7 +76,7 @@ O job de resumo transporta apenas ator e projeto. O worker revalida autorizaçã
 ## Próximos incrementos
 
 1. Gestão dinâmica de áreas/cargos, convites e recuperação de acesso.
-2. Ordenação manual do backlog, carryover com histórico e burndown por dia.
+2. Ordenação manual do backlog e burndown por dia.
 3. Ingestão/RAG autorizado com citações e exclusão/reindexação de conteúdo.
 4. Outbox para outros eventos e monitoramento de atraso/retries das filas.
 5. Coordenação de refresh entre abas, limites de uso/custo por usuário e cobertura de revogação em sessões longas.
