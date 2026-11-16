@@ -16,6 +16,7 @@ import { projectRoutes } from './modules/projects.js';
 import { taskRoutes } from './modules/tasks.js';
 import { dashboardRoutes } from './modules/dashboards.js';
 import { realtimeRoutes } from './modules/realtime.js';
+import { orgRoutes } from './modules/org.js';
 export async function buildApp() {
   const app = Fastify({
     logger: {
@@ -80,6 +81,7 @@ export async function buildApp() {
   for (const routes of [
     authRoutes,
     directoryRoutes,
+    orgRoutes,
     projectRoutes,
     taskRoutes,
     dashboardRoutes,

@@ -37,7 +37,7 @@ export async function authenticate(request: FastifyRequest): Promise<void> {
   } catch {
     throw new HttpError(401, 'Sessão expirada.');
   }
-  const result = await db.query('SELECT id,role FROM users WHERE id=$1 AND active=true', [
+  const result = await db.query('SELECT id,role FROM users WHERE id=$1 AND is_active=true', [
     request.user.sub,
   ]);
   const parsed = z
@@ -78,7 +78,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const input = loginInput.parse(request.body);
       const result = await db.query(
-        `SELECT ${userColumns},password_hash FROM users WHERE email=$1 AND active=true`,
+        `SELECT ${userColumns},password_hash FROM users WHERE email=$1 AND is_active=true`,
         [input.email.toLowerCase()],
       );
       const row = z
@@ -120,7 +120,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         return null;
       }
       const users = await client.query(
-        `SELECT ${userColumns} FROM users WHERE id=$1 AND active=true`,
+        `SELECT ${userColumns} FROM users WHERE id=$1 AND is_active=true`,
         [row.user_id],
       );
       if (!users.rowCount) return null;
@@ -232,7 +232,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     if (config.GOOGLE_WORKSPACE_DOMAIN && identity.hd !== config.GOOGLE_WORKSPACE_DOMAIN)
       throw new HttpError(403, 'Workspace não permitido.');
     const result = await db.query(
-      `UPDATE users SET google_sub=$2 WHERE email=$1 AND active=true AND (google_sub IS NULL OR google_sub=$2) RETURNING ${userColumns}`,
+      `UPDATE users SET google_sub=$2 WHERE email=$1 AND is_active=true AND (google_sub IS NULL OR google_sub=$2) RETURNING ${userColumns}`,
       [identity.email.toLowerCase(), identity.sub],
     );
     if (!result.rowCount) throw new HttpError(403, 'Conta não provisionada pela diretoria.');

@@ -29,12 +29,25 @@ export async function directoryRoutes(app: FastifyInstance): Promise<void> {
     if (userId === request.actor.id && !active)
       throw new HttpError(409, 'Não é possível desativar sua própria conta.');
     await transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('admin-role-lifecycle'))");
+      const target = found(
+        (await client.query('SELECT role,is_active FROM users WHERE id=$1 FOR UPDATE', [userId]))
+          .rows[0],
+      );
+      if (target['role'] === 'ADMIN' && target['is_active'] === true && !active) {
+        const remaining = await client.query(
+          "SELECT count(*)::int AS count FROM users WHERE role='ADMIN' AND is_active=true AND id<>$1",
+          [userId],
+        );
+        if (remaining.rows[0]?.['count'] === 0)
+          throw new HttpError(409, 'Não é possível desativar o último ADMIN ativo.');
+      }
       found(
         (
-          await client.query('UPDATE users SET active=$2 WHERE id=$1 RETURNING id', [
-            userId,
-            active,
-          ])
+          await client.query(
+            'UPDATE users SET active=$2,is_active=$2,deactivated_at=CASE WHEN $2 THEN NULL ELSE COALESCE(deactivated_at,now()) END WHERE id=$1 RETURNING id',
+            [userId, active],
+          )
         ).rows[0],
       );
       if (!active)
@@ -47,7 +60,7 @@ export async function directoryRoutes(app: FastifyInstance): Promise<void> {
   app.get('/users', async (request) => {
     // Minimal directory profile, visible only to fellow project members; admin sees all.
     const rows = await db.query(
-      `SELECT ${userColumns} FROM users WHERE active=true AND ($1::boolean OR id=$2 OR id IN (SELECT a.user_id FROM allocations a JOIN allocations mine ON mine.project_id=a.project_id WHERE mine.user_id=$2)) ORDER BY name`,
+      `SELECT ${userColumns} FROM users WHERE ($1::boolean OR (is_active=true AND (id=$2 OR id IN (SELECT a.user_id FROM allocations a JOIN allocations mine ON mine.project_id=a.project_id WHERE mine.user_id=$2)))) ORDER BY name`,
       [request.actor.role === 'ADMIN', request.actor.id],
     );
     return z.array(userSchema).parse(rows.rows);
@@ -78,10 +91,20 @@ export async function directoryRoutes(app: FastifyInstance): Promise<void> {
     const userId = id.parse(z.object({ id }).parse(request.params).id),
       input = profileInput.parse(request.body);
     return transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('admin-role-lifecycle'))");
       const previous = await client.query('SELECT role FROM users WHERE id=$1 FOR UPDATE', [
         userId,
       ]);
       found(previous.rows[0]);
+      const previousRole = previous.rows[0]?.['role'];
+      if (previousRole === 'ADMIN' && input.role !== 'ADMIN') {
+        const remaining = await client.query(
+          "SELECT count(*)::int AS count FROM users WHERE role='ADMIN' AND is_active=true AND id<>$1",
+          [userId],
+        );
+        if (remaining.rows[0]?.['count'] === 0)
+          throw new HttpError(409, 'Não é possível rebaixar o último ADMIN ativo.');
+      }
       if (userId === request.actor.id && input.role !== 'ADMIN')
         throw new HttpError(409, 'Não é possível remover sua própria administração.');
       const row = await client.query(

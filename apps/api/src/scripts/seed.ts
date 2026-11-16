@@ -65,7 +65,7 @@ try {
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, '-')}`;
         await client.query(
-          'INSERT INTO org_subareas(id,area_id,name,slug) VALUES($1,$2,$3,$4) ON CONFLICT(slug) DO NOTHING',
+          'INSERT INTO org_subareas(id,area_id,name,slug) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',
           [crypto.randomUUID(), areaRow.rows[0]?.id, name, slug],
         );
       }
