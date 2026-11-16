@@ -32,7 +32,10 @@ export async function publishOutbox(): Promise<void> {
     for (const row of rows.rows) {
       const event = eventSchema.parse(row.payload);
       await redis.incr('dashboard:revision');
-      await redis.publish(`project:${event.projectId}`, JSON.stringify(event));
+      await redis.publish(
+        event.type === 'OrgManagementChanged' ? 'org:management' : `project:${event.projectId}`,
+        JSON.stringify(event),
+      );
       await client.query('UPDATE outbox SET published_at=now() WHERE id=$1', [row.id]);
     }
   });

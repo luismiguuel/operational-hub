@@ -30,7 +30,9 @@ export const profileInput = z
         message: 'Subárea incompatível com a área.',
       });
   });
-export const userSchema = profileInput.innerType().extend({ id, active: z.boolean() });
+export const userSchema = profileInput
+  .innerType()
+  .extend({ id, area: z.string().min(2), active: z.boolean() });
 export type User = z.infer<typeof userSchema>;
 export const projectInput = z
   .object({
@@ -173,6 +175,14 @@ export const eventSchema = z.discriminatedUnion('type', [
     carryoverCount: z.number().int().nonnegative(),
     carryoverPoints: z.number().int().nonnegative(),
   }),
+  z.object({
+    id,
+    type: z.literal('OrgManagementChanged'),
+    actorId: id,
+    resourceType: z.enum(['AREA', 'SUBAREA', 'ROLE', 'MEMBER', 'BULK_PROVISION']),
+    resourceId: id.nullable(),
+    occurredAt: z.string().datetime(),
+  }),
 ]);
 export type DomainEvent = z.infer<typeof eventSchema>;
 export const wsClientSchema = z
@@ -190,7 +200,7 @@ export const loginInput = z
 export const heatSchema = z.object({
   userId: id,
   name: z.string(),
-  area: areaSchema,
+  area: z.string(),
   capacity: z.number(),
   allocated: z.number(),
   activeTasks: z.number(),
@@ -232,3 +242,83 @@ export const auditSchema = z.object({
   payload: z.unknown(),
   createdAt: z.string(),
 });
+
+const slugSchema = z
+  .string()
+  .trim()
+  .min(2)
+  .max(80)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+export const createAreaSchema = z
+  .object({
+    name: z.string().trim().min(2).max(100),
+    slug: slugSchema,
+    description: z.string().trim().max(500).default(''),
+  })
+  .strict();
+export const updateAreaSchema = createAreaSchema
+  .partial()
+  .extend({ isActive: z.boolean().optional() })
+  .strict();
+export const createSubareaSchema = z
+  .object({
+    areaId: id,
+    name: z.string().trim().min(2).max(100),
+    slug: slugSchema,
+  })
+  .strict();
+export const updateSubareaSchema = createSubareaSchema
+  .omit({ areaId: true })
+  .partial()
+  .extend({ areaId: id.optional(), isActive: z.boolean().optional() })
+  .strict();
+export const createRoleSchema = z
+  .object({
+    name: z.string().trim().min(2).max(100),
+    slug: slugSchema,
+  })
+  .strict();
+export const updateRoleSchema = createRoleSchema
+  .partial()
+  .extend({ isActive: z.boolean().optional() })
+  .strict();
+export const orgAreaSchema = createAreaSchema.extend({ id, isActive: z.boolean() });
+export const orgSubareaSchema = createSubareaSchema.extend({ id, isActive: z.boolean() });
+export const orgRoleSchema = createRoleSchema.extend({ id, isActive: z.boolean() });
+export const orgTaxonomySchema = z.object({
+  areas: z.array(orgAreaSchema.extend({ subareas: z.array(orgSubareaSchema) })),
+  roles: z.array(orgRoleSchema),
+});
+export const updateMemberAdminSchema = z
+  .object({
+    area: z.string().trim().min(2).max(100),
+    subarea: z.string().trim().max(100).nullable(),
+    role: z.string().trim().min(2).max(100),
+    systemRole: roleSchema,
+    weeklyCapacityHours: z.number().int().min(1).max(40),
+    isActive: z.boolean(),
+  })
+  .strict();
+export const bulkProvisionMembersSchema = z
+  .object({
+    members: z
+      .array(
+        z
+          .object({
+            name: z.string().trim().min(2).max(120),
+            email: z.string().email(),
+            area: z.string().trim().min(2).max(100),
+            subarea: z.string().trim().max(100).nullable().optional(),
+            role: z.string().trim().min(2).max(100),
+            systemRole: roleSchema,
+            weeklyCapacityHours: z.number().int().min(1).max(40),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(500),
+  })
+  .strict();
+export type OrgTaxonomy = z.infer<typeof orgTaxonomySchema>;
+export type UpdateMemberAdmin = z.infer<typeof updateMemberAdminSchema>;
+export type BulkProvisionMembers = z.infer<typeof bulkProvisionMembersSchema>;

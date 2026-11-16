@@ -77,7 +77,7 @@ export async function realtimeRoutes(app: FastifyInstance): Promise<void> {
               Math.max(0, claims.exp * 1000 - Date.now()),
             );
             unsubscribe = bus.onEvent((event) => {
-              if (event.projectId !== projectId) return;
+              if (!('projectId' in event) || event.projectId !== projectId) return;
               // Revalidate each delivery, so revoked allocations never keep room access.
               void (async () => {
                 try {

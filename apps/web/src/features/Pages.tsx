@@ -292,7 +292,7 @@ export function People({ projects }: { projects: Project[] }) {
     [editing, setEditing] = useState<User | null>(null),
     [allocation, setAllocation] = useState(false),
     [search, setSearch] = useState(''),
-    [area, setArea] = useState<z.infer<typeof areaSchema>>('Tech');
+    [area, setArea] = useState<string>('Tech');
   const save = useMutation({
     mutationFn: (input: unknown) =>
       api(
@@ -463,7 +463,7 @@ export function People({ projects }: { projects: Project[] }) {
               defaultValue={editing?.area === area ? (editing.subarea ?? '') : ''}
             >
               <option value="">Sem subárea</option>
-              {areas[area].map((a) => (
+              {(areas[area as keyof typeof areas] ?? []).map((a) => (
                 <option key={a}>{a}</option>
               ))}
             </select>
