@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
   allocationInput,
+  closeSprintSchema,
   id,
   projectInput,
   projectSchema,
@@ -118,10 +119,17 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
   });
   app.patch('/projects/:projectId/sprints/:sprintId', async (request) => {
     const { projectId, sprintId } = params.extend({ sprintId: id }).parse(request.params);
-    const { state } = z
+    const body = z
       .object({ state: z.enum(['ACTIVE', 'CLOSED']) })
-      .strict()
+      .passthrough()
       .parse(request.body);
+    const close =
+      body.state === 'CLOSED'
+        ? closeSprintSchema.parse({
+            unfinishedAction: body.unfinishedAction,
+            targetSprintId: body.targetSprintId,
+          })
+        : null;
     return transaction(async (client) => {
       await projectAccess(request.actor, projectId, true, client);
       const previous = z
@@ -137,28 +145,89 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
           ),
         );
       if (!(
-        (previous.state === 'PLANNED' && state === 'ACTIVE') ||
-        (previous.state === 'ACTIVE' && state === 'CLOSED')
+        (previous.state === 'PLANNED' && body.state === 'ACTIVE') ||
+        (previous.state === 'ACTIVE' && body.state === 'CLOSED')
       ))
         throw new HttpError(409, 'Transição de sprint inválida.');
-      if (
-        state === 'CLOSED' &&
-        (
+      let moved = 0;
+      let doneCount = 0;
+      let donePoints = 0;
+      let movedPoints = 0;
+      if (close) {
+        if (close.unfinishedAction === 'NEXT_SPRINT') {
+          const target = (
+            await client.query(
+              'SELECT state FROM sprints WHERE project_id=$1 AND id=$2 FOR UPDATE',
+              [projectId, close.targetSprintId],
+            )
+          ).rows[0];
+          if (!target) throw new HttpError(404, 'Sprint de destino não encontrada neste projeto.');
+          if ((target as { state: string }).state !== 'PLANNED')
+            throw new HttpError(400, 'A sprint de destino precisa estar planejada.');
+        }
+        const summary = (
           await client.query(
-            "SELECT 1 FROM tasks WHERE project_id=$1 AND sprint_id=$2 AND kind='TASK' AND status<>'DONE' LIMIT 1",
+            "SELECT count(*) FILTER (WHERE status='DONE')::int AS done_count, coalesce(sum(points) FILTER (WHERE status='DONE'),0)::int AS done_points, count(*) FILTER (WHERE status<>'DONE')::int AS open_count, coalesce(sum(points) FILTER (WHERE status<>'DONE'),0)::int AS open_points FROM tasks WHERE project_id=$1 AND sprint_id=$2 AND kind='TASK'",
             [projectId, sprintId],
           )
-        ).rowCount
-      )
-        throw new HttpError(409, 'Conclua as tarefas antes de encerrar esta sprint.');
+        ).rows[0] as {
+          done_count: number;
+          done_points: number;
+          open_count: number;
+          open_points: number;
+        };
+        doneCount = summary.done_count;
+        donePoints = summary.done_points;
+        moved = summary.open_count;
+        movedPoints = summary.open_points;
+        const destination = close.unfinishedAction === 'BACKLOG' ? null : close.targetSprintId;
+        const tasks = await client.query<{ id: string; status: string }>(
+          "UPDATE tasks SET sprint_id=$3, version=version+1, updated_at=now() WHERE project_id=$1 AND sprint_id=$2 AND status<>'DONE' RETURNING id,status",
+          [projectId, sprintId, destination],
+        );
+        for (const task of tasks.rows) {
+          const event = {
+            id: crypto.randomUUID(),
+            type: 'TaskStatusChanged',
+            projectId,
+            taskId: task.id,
+            actorId: request.actor.id,
+            from: task.status,
+            to: task.status,
+            occurredAt: new Date().toISOString(),
+          };
+          await client.query(
+            'INSERT INTO activity_log(id,project_id,actor_id,action,payload) VALUES($1,$2,$3,$4,$5)',
+            [
+              event.id,
+              projectId,
+              request.actor.id,
+              'sprint.carryover',
+              JSON.stringify({ ...event, fromSprintId: sprintId, toSprintId: destination }),
+            ],
+          );
+          await client.query('INSERT INTO outbox(id,payload) VALUES($1,$2)', [
+            event.id,
+            JSON.stringify(event),
+          ]);
+        }
+      }
       const row = await client.query(
-        `UPDATE sprints SET state=$3 WHERE project_id=$1 AND id=$2 RETURNING ${sprintColumns}`,
-        [projectId, sprintId, state],
+        `UPDATE sprints SET state=$3, closed_at=CASE WHEN $3='CLOSED' THEN now() ELSE closed_at END WHERE project_id=$1 AND id=$2 RETURNING ${sprintColumns}`,
+        [projectId, sprintId, body.state],
       );
-      await audit(client, request.actor.id, 'sprint.state_changed', sprintId, {
-        from: previous.state,
-        to: state,
-      });
+      const auditPayload = close
+        ? {
+            from: previous.state,
+            to: body.state,
+            doneCount,
+            donePoints,
+            carryoverCount: moved,
+            carryoverPoints: movedPoints,
+            destination: close.unfinishedAction,
+          }
+        : { from: previous.state, to: body.state };
+      await audit(client, request.actor.id, 'sprint.state_changed', sprintId, auditPayload);
       return sprintSchema.parse(row.rows[0]);
     });
   });

@@ -11,6 +11,7 @@ try {
       await client.query(schema);
       await client.query('INSERT INTO schema_migrations(version) VALUES(1)');
     }
+    await client.query('ALTER TABLE sprints ADD COLUMN IF NOT EXISTS closed_at timestamptz');
   });
   console.info('Migração 1 aplicada.');
 } finally {

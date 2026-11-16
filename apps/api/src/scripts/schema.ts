@@ -14,7 +14,7 @@ CREATE TABLE users (
 CREATE TABLE projects (id uuid PRIMARY KEY, name text NOT NULL, description text NOT NULL, kind text NOT NULL CHECK(kind IN ('EXTERNAL','INTERNAL')),archived boolean NOT NULL DEFAULT false);
 CREATE TABLE allocations (project_id uuid REFERENCES projects(id),user_id uuid REFERENCES users(id),role text NOT NULL CHECK(role IN ('LEADER','MEMBER')),weekly_hours integer NOT NULL CHECK(weekly_hours BETWEEN 1 AND 40), PRIMARY KEY(project_id,user_id));
 CREATE INDEX allocations_user ON allocations(user_id);
-CREATE TABLE sprints (id uuid PRIMARY KEY,project_id uuid NOT NULL REFERENCES projects(id),name text NOT NULL,goal text NOT NULL,starts_on date NOT NULL,ends_on date NOT NULL,state text NOT NULL DEFAULT 'PLANNED' CHECK(state IN ('PLANNED','ACTIVE','CLOSED')),CHECK(ends_on>=starts_on),UNIQUE(project_id,id));
+CREATE TABLE sprints (id uuid PRIMARY KEY,project_id uuid NOT NULL REFERENCES projects(id),name text NOT NULL,goal text NOT NULL,starts_on date NOT NULL,ends_on date NOT NULL,closed_at timestamptz,state text NOT NULL DEFAULT 'PLANNED' CHECK(state IN ('PLANNED','ACTIVE','CLOSED')),CHECK(ends_on>=starts_on),UNIQUE(project_id,id));
 CREATE UNIQUE INDEX one_active_sprint ON sprints(project_id) WHERE state='ACTIVE';
 CREATE TABLE tasks (
  id uuid PRIMARY KEY,project_id uuid NOT NULL REFERENCES projects(id),sprint_id uuid,epic_id uuid,
