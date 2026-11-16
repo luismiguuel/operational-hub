@@ -15,7 +15,7 @@ test('autenticação, navegação responsiva e abertura de card', async ({ page 
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
   ).toBeTruthy();
-  await page.screenshot({ path: `/tmp/elo-${info.project.name}.png`, fullPage: true });
+  await page.screenshot({ path: `/tmp/citi-hub-${info.project.name}.png`, fullPage: true });
   if (info.project.name === 'desktop') {
     const source = await page
       .locator('.task-card')

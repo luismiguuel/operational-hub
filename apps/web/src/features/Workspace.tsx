@@ -353,10 +353,6 @@ export function Workspace({ project }: { project: Project }) {
               ))}
             </div>
           )}
-          <p className="board-footnote">
-            <CheckCheck size={15} /> Cada entrega constrói a próxima.{' '}
-            <span>Arraste cards ou use o seletor de status ao abrir uma tarefa.</span>
-          </p>
         </>
       )}
       <CreateTask
@@ -472,7 +468,7 @@ function TaskCard({
       {...listeners}
     >
       <div className="card-top">
-        <span className="task-code">ELO-{task.id.slice(0, 4).toUpperCase()}</span>
+        <span className="task-code">CITIHUB-{task.id.slice(0, 4).toUpperCase()}</span>
         <span className={`priority ${task.priority.toLowerCase()}`}>
           {task.priority === 'HIGH' ? '↑ Alta' : task.priority === 'MEDIUM' ? '— Média' : '↓ Baixa'}
         </span>
