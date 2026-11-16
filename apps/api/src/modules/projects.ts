@@ -73,7 +73,7 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
         .parse(
           found(
             (
-              await client.query('SELECT role FROM users WHERE id=$1 AND active=true', [
+              await client.query('SELECT role FROM users WHERE id=$1 AND is_active=true', [
                 input.userId,
               ])
             ).rows[0],

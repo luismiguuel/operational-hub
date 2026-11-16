@@ -215,6 +215,7 @@ export async function orgRoutes(app: FastifyInstance): Promise<void> {
     const userId = z.object({ userId: id }).parse(request.params).userId;
     const input = updateMemberAdminSchema.parse(request.body);
     return transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('admin-role-lifecycle'))");
       const previous = found(
         (await client.query('SELECT id,role,is_active FROM users WHERE id=$1 FOR UPDATE', [userId]))
           .rows[0],

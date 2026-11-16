@@ -20,7 +20,7 @@ async function validateRelations(
     input.assigneeId &&
     !(
       await client.query(
-        'SELECT 1 FROM allocations a JOIN users u ON u.id=a.user_id WHERE project_id=$1 AND user_id=$2 AND u.active=true',
+        'SELECT 1 FROM allocations a JOIN users u ON u.id=a.user_id WHERE project_id=$1 AND user_id=$2 AND u.is_active=true',
         [projectId, input.assigneeId],
       )
     ).rowCount

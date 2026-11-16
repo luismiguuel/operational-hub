@@ -64,7 +64,7 @@ export async function realtimeRoutes(app: FastifyInstance): Promise<void> {
               .object({ id, role: z.enum(['ADMIN', 'LEADER', 'MEMBER']) })
               .parse(
                 (
-                  await db.query('SELECT id,role FROM users WHERE id=$1 AND active=true', [
+                  await db.query('SELECT id,role FROM users WHERE id=$1 AND is_active=true', [
                     claims.sub,
                   ])
                 ).rows[0],
@@ -85,7 +85,7 @@ export async function realtimeRoutes(app: FastifyInstance): Promise<void> {
                     .object({ id, role: z.enum(['ADMIN', 'LEADER', 'MEMBER']) })
                     .parse(
                       (
-                        await db.query('SELECT id,role FROM users WHERE id=$1 AND active=true', [
+                        await db.query('SELECT id,role FROM users WHERE id=$1 AND is_active=true', [
                           row.id,
                         ])
                       ).rows[0],

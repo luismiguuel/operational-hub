@@ -15,7 +15,7 @@ const worker = new Worker<{ projectId: string; actorId: string }, string>(
       .object({ id: z.string().uuid(), role: z.enum(['ADMIN', 'LEADER', 'MEMBER']) })
       .parse(
         (
-          await db.query('SELECT id,role FROM users WHERE id=$1 AND active=true', [
+          await db.query('SELECT id,role FROM users WHERE id=$1 AND is_active=true', [
             job.data.actorId,
           ])
         ).rows[0],
