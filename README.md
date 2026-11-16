@@ -33,6 +33,7 @@ Abra <http://localhost:5173>. Em outro terminal, com Node 22 ativo, execute `pnp
 ## Entrega desta fundação
 
 - Diretório de pessoas com área, subárea, cargo, capacidade semanal e papel de sistema independente da área. Criação/edição pela diretoria; ativação/desativação via API.
+- Gestão dinâmica pela diretoria de áreas, subáreas e cargos, com carga CSV em lote, detecção de e-mails existentes e contas inativas preservadas no histórico.
 - Catálogo externo/interno, criação, arquivamento/reativação e alocações contextuais com horas planejadas.
 - Épicos e tarefas, backlog por `sprintId=null`, prioridades, pontos Fibonacci, tags, Markdown sanitizado, responsável único opcional no planejamento, checklist, links HTTPS e comentários.
 - Sprints planejadas/ativas/encerradas. Planeje o escopo **antes** de iniciar. Apenas uma sprint ativa por projeto. Inclusão, remoção e alteração de pontos/épico/tipo são bloqueadas após o início. Ao encerrar, devolva itens pendentes ao backlog (padrão) ou mova-os para uma sprint planejada do mesmo projeto. O status das tarefas é preservado, a versão é incrementada e a sprint recebe `closed_at`. Tarefas concluídas permanecem na sprint original; a velocidade considera apenas seus story points. Reabertura permanece fora desta entrega.
@@ -86,7 +87,7 @@ apps/web/src/
 packages/shared/src/  schemas Zod, DTOs, RBAC e eventos
 ```
 
-Consulte [arquitetura e limites](docs/architecture.md) e [contrato REST](docs/api.md). As taxonomias de áreas/subáreas e papéis são deliberadamente estáticas nesta fundação; o administrador administra seus vínculos nos perfis. Gestão dinâmica dessas taxonomias, RAG com ingestão/embeddings/busca, burndown histórico e IA em outros pontos da operação ainda precisam de implementação. Timesheet, financeiro, chat nativo e sincronizações bidirecionais permanecem fora da v1.
+Consulte [arquitetura e limites](docs/architecture.md) e [contrato REST](docs/api.md). As taxonomias organizacionais são configuráveis pela diretoria; o papel de sistema (`ADMIN`, `LEADER`, `MEMBER`) continua separado do cargo. RAG com ingestão/embeddings/busca, burndown histórico e IA em outros pontos da operação ainda precisam de implementação. Timesheet, financeiro, chat nativo e sincronizações bidirecionais permanecem fora da v1.
 
 O build da SPA fica em `apps/web/dist`. API e worker executam fontes TypeScript com `tsx`; o build faz verificação/compilação TypeScript. Hospede API/worker em Node com acesso TCP a PostgreSQL/Redis e sirva a SPA com fallback para `index.html`, encaminhando `/api` e upgrades WebSocket à API. Não há publicação externa nem infraestrutura de produção provisionada.
 

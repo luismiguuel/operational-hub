@@ -16,16 +16,17 @@ flowchart LR
 
 ## Fronteiras
 
-| Módulo     | Responsabilidade                                            |
-| ---------- | ----------------------------------------------------------- |
-| Auth       | Identidade, sessão, OAuth/OIDC e autorização da conta ativa |
-| Diretório  | Perfis, capacidade e catálogo de áreas                      |
-| Projetos   | Catálogo, arquivamento, vínculos e ciclos                   |
-| Tarefas    | Backlog, execução, checklist, referências e comentários     |
-| Dashboards | Leitura agregada por ator e escopo                          |
-| Realtime   | Autenticação de conexão, sala e entrega de eventos          |
-| Worker     | Publicação da outbox e inferência assíncrona                |
-| Shared     | Contratos validados nos dois lados da rede                  |
+| Módulo      | Responsabilidade                                            |
+| ----------- | ----------------------------------------------------------- |
+| Auth        | Identidade, sessão, OAuth/OIDC e autorização da conta ativa |
+| Diretório   | Perfis, capacidade e catálogo de áreas                      |
+| Projetos    | Catálogo, arquivamento, vínculos e ciclos                   |
+| Tarefas     | Backlog, execução, checklist, referências e comentários     |
+| Dashboards  | Leitura agregada por ator e escopo                          |
+| Realtime    | Autenticação de conexão, sala e entrega de eventos          |
+| Worker      | Publicação da outbox e inferência assíncrona                |
+| Shared      | Contratos validados nos dois lados da rede                  |
+| Organização | Taxonomias dinâmicas e ciclo de vida dos membros            |
 
 Os módulos compartilham um PostgreSQL e transações explícitas com `pg`. Identificadores recebidos são validados com Zod e consultas usam parâmetros. Foreign keys compostas garantem que sprint, responsável e épico pertençam ao mesmo projeto da tarefa. O código ainda valida tipo do épico, existência e estado da sprint com mensagens de domínio.
 
@@ -34,6 +35,14 @@ Os módulos compartilham um PostgreSQL e transações explícitas com `pg`. Iden
 A área expressa especialidade; o papel expressa autoridade. `LEADER` no sistema só pode gerir um projeto quando também tem `LEADER` no vínculo. `MEMBER` não obtém privilégios administrativos por um vínculo incorreto. Diretoria tem visão global. Membros veem projetos vinculados e alteram somente suas tarefas (ou cards criados por eles que ainda não tenham responsável). Priorização, alocação e escopo exigem liderança contextual.
 
 Gente e Gestão tem leitura global **somente do mapa de alocação**, uma capacidade específica para seu trabalho; não recebe acesso implícito aos cards dos projetos. Líderes veem alocação e carga apenas nos projetos que lideram. Diretório expõe perfis de colegas de projeto e o próprio perfil; a diretoria vê todos. Para ampliar o time com pessoas ainda fora do diretório do líder, a diretoria faz o vínculo inicial.
+
+### Organização e ciclo de vida de membros
+
+Áreas, subáreas e cargos ficam em `org_areas`, `org_subareas` e `org_roles`, com identificador estável (`slug`) e ativação independente. `GET /api/v1/org/taxonomy` entrega o catálogo para a UI; mutações de criação, edição e ativação exigem `ADMIN`. A migração v2 mantém `users.area`, `subarea` e `title` para compatibilidade, mas remove a validação fixa que impedia novas taxonomias.
+
+O papel de sistema permanece `ADMIN`, `LEADER` ou `MEMBER` e não se confunde com o cargo organizacional. `PATCH /api/v1/users/:userId/admin` altera área, subárea, cargo, papel de sistema, capacidade semanal e estado da conta. A conta é desativada sem apagar usuário, tarefas, comentários ou auditoria; `is_active` bloqueia login, refresh e requests, `deactivated_at` guarda quando ocorreu e os refresh tokens são revogados. A última conta `ADMIN` ativa não pode ser desativada ou rebaixada.
+
+`POST /api/v1/users/bulk-provision` cria membros em uma transação e informa emails criados e já existentes, sem emitir senhas. Ações administrativas gravam `audit_log` e `OrgManagementChanged` na outbox na mesma transação. Seeds de áreas, subáreas e cargos usam `ON CONFLICT` e podem ser executados novamente com segurança.
 
 Um projeto desconhecido ou sem vínculo retorna 404, evitando confirmar existência. Um card é consultado sempre pelo par `(projectId, taskId)`. Sessões, resumos, métricas, comentários e conexões WebSocket também passam pelas políticas. Mudanças de papel e conta ativa são consultadas a cada request; o papel não é confiado ao JWT.
 
@@ -75,7 +84,7 @@ O job de resumo transporta apenas ator e projeto. O worker revalida autorizaçã
 
 ## Próximos incrementos
 
-1. Gestão dinâmica de áreas/cargos, convites e recuperação de acesso.
+1. Convites e recuperação de acesso.
 2. Ordenação manual do backlog e burndown por dia.
 3. Ingestão/RAG autorizado com citações e exclusão/reindexação de conteúdo.
 4. Outbox para outros eventos e monitoramento de atraso/retries das filas.
