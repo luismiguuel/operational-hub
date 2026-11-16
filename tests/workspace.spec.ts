@@ -7,9 +7,9 @@ test('autenticação, navegação responsiva e abertura de card', async ({ page 
     'Requer seed de demonstração explícito.',
   );
   await page.goto('/');
-  await page.getByLabel('E-mail institucional').fill(email ?? '');
+  await page.getByLabel('E-mail', { exact: true }).fill(email ?? '');
   await page.getByLabel('Senha', { exact: true }).fill(password ?? '');
-  await page.getByRole('button', { name: 'Acessar meu workspace' }).click();
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Portal do cliente', exact: true })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Kanban' })).toHaveAttribute('aria-selected', 'true');
   expect(
@@ -62,5 +62,5 @@ test('autenticação, navegação responsiva e abertura de card', async ({ page 
   if (info.project.name === 'mobile')
     await page.getByRole('button', { name: 'Abrir navegação' }).click();
   await page.getByRole('button', { name: 'Sair da conta' }).click();
-  await expect(page.getByRole('heading', { name: 'Vamos construir juntos.' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Entrar no CITi Hub' })).toBeVisible();
 });
