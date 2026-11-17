@@ -1,3 +1,4 @@
+import { knowledgeSchema } from './knowledge-schema.js';
 import { db, transaction } from '../core/db.js';
 import { schema } from './schema.js';
 try {
@@ -80,8 +81,10 @@ try {
         INSERT INTO schema_migrations(version) VALUES(3);
       `);
     }
+    await client.query(knowledgeSchema);
+    await client.query('INSERT INTO schema_migrations(version) VALUES(4) ON CONFLICT DO NOTHING');
   });
-  console.info('Migrações aplicadas (versões 1 a 3).');
+  console.info('Migrações aplicadas (versões 1 a 4).');
 } finally {
   await db.end();
 }
