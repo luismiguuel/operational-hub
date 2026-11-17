@@ -32,12 +32,14 @@ CREATE TABLE tasks (
  assignee_id uuid,created_by uuid NOT NULL REFERENCES users(id),status text NOT NULL DEFAULT 'TODO' CHECK(status IN ('TODO','IN_PROGRESS','REVIEW','DONE')),
  points integer NOT NULL CHECK(points IN (1,2,3,5,8)),priority text NOT NULL CHECK(priority IN ('HIGH','MEDIUM','LOW')),due_date date,
  tags jsonb NOT NULL DEFAULT '[]',checklist jsonb NOT NULL DEFAULT '[]',links jsonb NOT NULL DEFAULT '[]',version integer NOT NULL DEFAULT 1,
+ backlog_position integer NOT NULL DEFAULT 0,
  created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(project_id,id),
  FOREIGN KEY(project_id,sprint_id) REFERENCES sprints(project_id,id),
  FOREIGN KEY(project_id,assignee_id) REFERENCES allocations(project_id,user_id),
  FOREIGN KEY(project_id,epic_id) REFERENCES tasks(project_id,id),CHECK(epic_id IS NULL OR epic_id<>id)
 );
 CREATE INDEX tasks_project_sprint ON tasks(project_id,sprint_id);
+CREATE INDEX tasks_project_sprint_backlog_position ON tasks(project_id,sprint_id,backlog_position);
 CREATE INDEX tasks_assignee ON tasks(assignee_id);
 CREATE INDEX tasks_tags_gin ON tasks USING gin(tags);
 CREATE INDEX tasks_checklist_gin ON tasks USING gin(checklist);

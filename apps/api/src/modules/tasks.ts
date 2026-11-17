@@ -103,7 +103,11 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         .object({ archived: z.boolean() })
         .parse(
           found(
-            (await client.query('SELECT archived FROM projects WHERE id=$1', [projectId])).rows[0],
+            (
+              await client.query('SELECT archived FROM projects WHERE id=$1 FOR UPDATE', [
+                projectId,
+              ])
+            ).rows[0],
           ),
         );
       if (project.archived) throw new HttpError(409, 'Projeto arquivado.');
@@ -113,8 +117,17 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       )
         throw new HttpError(403, 'Membros criam tarefas próprias no backlog.');
       await validateRelations(client, projectId, input);
+      const backlogPosition =
+        input.sprintId === null
+          ? ((
+              await client.query<{ nextPosition: number }>(
+                'SELECT COALESCE(MAX(backlog_position) + 1, 0)::int AS "nextPosition" FROM tasks WHERE project_id=$1 AND sprint_id IS NULL',
+                [projectId],
+              )
+            ).rows[0]?.nextPosition ?? 0)
+          : 0;
       const row = await client.query(
-        `INSERT INTO tasks(id,project_id,title,description,acceptance,kind,epic_id,assignee_id,sprint_id,points,priority,due_date,tags,checklist,links,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING ${taskColumns}`,
+        `INSERT INTO tasks(id,project_id,title,description,acceptance,kind,epic_id,assignee_id,sprint_id,points,priority,due_date,tags,checklist,links,created_by,backlog_position) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING ${taskColumns}`,
         [
           taskId,
           projectId,
@@ -132,6 +145,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           JSON.stringify(input.checklist),
           JSON.stringify(input.links),
           request.actor.id,
+          backlogPosition,
         ],
       );
       await audit(client, request.actor.id, 'task.created', taskId, input);

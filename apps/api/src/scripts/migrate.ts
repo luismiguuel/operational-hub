@@ -65,8 +65,23 @@ try {
         INSERT INTO schema_migrations(version) VALUES(2);
       `);
     }
+    const backlog = await client.query('SELECT version FROM schema_migrations WHERE version=3');
+    if (backlog.rowCount === 0) {
+      await client.query(`
+        ALTER TABLE tasks ADD COLUMN IF NOT EXISTS backlog_position integer NOT NULL DEFAULT 0;
+        WITH ranked_backlog AS (
+          SELECT id, row_number() OVER (PARTITION BY project_id ORDER BY created_at ASC, id ASC) - 1 AS position
+          FROM tasks WHERE sprint_id IS NULL
+        )
+        UPDATE tasks AS task SET backlog_position=ranked_backlog.position
+        FROM ranked_backlog WHERE task.id=ranked_backlog.id;
+        CREATE INDEX IF NOT EXISTS tasks_project_sprint_backlog_position
+          ON tasks(project_id,sprint_id,backlog_position);
+        INSERT INTO schema_migrations(version) VALUES(3);
+      `);
+    }
   });
-  console.info('Migrações aplicadas (versões 1 e 2).');
+  console.info('Migrações aplicadas (versões 1 a 3).');
 } finally {
   await db.end();
 }
