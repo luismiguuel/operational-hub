@@ -17,6 +17,7 @@ import {
   userSchema,
 } from '@hub/shared';
 import { schema } from '../scripts/schema.js';
+import { knowledgeSchema } from '../scripts/knowledge-schema.js';
 // A fresh, randomly named database is created and dropped. The configured DB is never modified.
 process.env['NODE_ENV'] = 'test';
 const original = z.string().url().parse(process.env['DATABASE_URL']);
@@ -45,6 +46,7 @@ const headers = (token: string) => ({ authorization: `Bearer ${token}`, origin }
 before(async () => {
   await maintenance.query(`CREATE DATABASE ${name}`);
   await db.query(schema);
+  await db.query(knowledgeSchema);
   for (const [area, subareas] of Object.entries(areas))
     await db.query('INSERT INTO areas VALUES($1,$2)', [area, JSON.stringify(subareas)]);
   const orgAreas = [
@@ -945,4 +947,108 @@ test('pull do backlog move tarefas à sprint planejada e rejeita destino inváli
       .map((task) => task.id),
     [remaining.id],
   );
+});
+
+test('memória institucional indexa documentos e isola consultas por projeto', async () => {
+  await db.query('UPDATE users SET active=true,is_active=true,deactivated_at=NULL WHERE id=$1', [
+    memberId,
+  ]);
+  const create = async (token: string, title: string, scope: string | null) => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/knowledge/documents',
+      headers: headers(token),
+      payload: {
+        title,
+        category: 'ADR',
+        content: `arquitetura identidade ${title} informação preservada para consulta`,
+        projectId: scope,
+      },
+    });
+    assert.equal(res.statusCode, 201, res.body);
+    assert.equal(res.json().status, 'INDEXED');
+    return z.string().uuid().parse(res.json().id);
+  };
+  const global = await create(adminToken, 'memoria global', null);
+  const own = await create(memberToken, 'projeto publico', projectId);
+  const secret = await create(adminToken, 'segredo confidencial', otherProjectId);
+  const rows = await db.query(
+    'SELECT embedding FROM knowledge_chunks WHERE document_id=$1 AND embedding IS NOT NULL',
+    [own],
+  );
+  assert.ok(rows.rowCount);
+  for (const action of ['created', 'indexed']) {
+    assert.ok(
+      (
+        await db.query('SELECT id FROM audit_log WHERE resource_id=$1 AND action=$2', [
+          own,
+          `knowledge.${action}`,
+        ])
+      ).rowCount,
+    );
+    assert.ok(
+      (
+        await db.query(
+          "SELECT id FROM outbox WHERE payload->>'documentId'=$1 AND payload->>'action'=$2",
+          [own, action],
+        )
+      ).rowCount,
+    );
+  }
+  for (const scope of [undefined, null]) {
+    const result = await app.inject({
+      method: 'POST',
+      url: '/api/v1/knowledge/query',
+      headers: headers(memberToken),
+      payload: { question: 'arquitetura identidade', projectId: scope },
+    });
+    assert.equal(result.statusCode, 200, result.body);
+    const body = z
+      .object({
+        answer: z.string().min(1),
+        citations: z.array(
+          z.object({ documentId: z.string(), score: z.number(), snippet: z.string() }),
+        ),
+      })
+      .parse(result.json());
+    assert.ok(body.citations.some((c) => c.documentId === own));
+    assert.ok(body.citations.some((c) => c.documentId === global));
+    assert.ok(body.citations.every((c) => c.documentId !== secret));
+    assert.ok(
+      body.citations.every((c, i) => i === 0 || c.score <= (body.citations[i - 1]?.score ?? 0)),
+    );
+  }
+  for (const [method, url, payload] of [
+    ['GET', `/api/v1/knowledge/documents?projectId=${otherProjectId}`, undefined],
+    [
+      'POST',
+      '/api/v1/knowledge/query',
+      { question: 'arquitetura identidade', projectId: otherProjectId },
+    ],
+  ] as const) {
+    const result = await app.inject({
+      method,
+      url,
+      headers: headers(memberToken),
+      ...(payload ? { payload } : {}),
+    });
+    assert.ok([403, 404].includes(result.statusCode), result.body);
+  }
+  for (const [method, suffix] of [
+    ['POST', '/reindex'],
+    ['DELETE', ''],
+  ] as const) {
+    const denied = await app.inject({
+      method,
+      url: `/api/v1/knowledge/documents/${secret}${suffix}`,
+      headers: headers(memberToken),
+    });
+    assert.ok([403, 404].includes(denied.statusCode), denied.body);
+    const allowed = await app.inject({
+      method,
+      url: `/api/v1/knowledge/documents/${own}${suffix}`,
+      headers: headers(memberToken),
+    });
+    assert.equal(allowed.statusCode, 200, allowed.body);
+  }
 });
