@@ -1,3 +1,4 @@
+import { knowledgeRoutes } from './modules/knowledge.js';
 import Fastify from 'fastify';
 import type { FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
@@ -81,6 +82,7 @@ export async function buildApp() {
   });
   for (const routes of [
     authRoutes,
+    knowledgeRoutes,
     directoryRoutes,
     orgRoutes,
     backlogRoutes,

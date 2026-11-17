@@ -1,12 +1,18 @@
+import { indexKnowledge } from './core/knowledge.js';
 import { Worker } from 'bullmq';
 import { z } from 'zod';
 import { taskSchema } from '@hub/shared';
-import { queueConnection, redis, aiQueue } from './core/redis.js';
+import { queueConnection, redis, aiQueue, knowledgeQueue } from './core/redis.js';
 import { db } from './core/db.js';
 import { config } from './core/config.js';
 import { projectAccess, audit } from './core/access.js';
 import { taskColumns } from './core/records.js';
 import { publishOutbox } from './core/events.js';
+const knowledgeWorker = new Worker<{ documentId: string }>(
+  'knowledge-index',
+  async (job) => indexKnowledge(job.data.documentId),
+  { connection: queueConnection, concurrency: 2 },
+);
 const worker = new Worker<{ projectId: string; actorId: string }, string>(
   'project-summary',
   async (job) => {
@@ -99,6 +105,8 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const)
     clearInterval(timer);
     void (async () => {
       await worker.close();
+      await knowledgeWorker.close();
+      await knowledgeQueue.close();
       while (running) await new Promise((resolve) => setTimeout(resolve, 25));
       await aiQueue.close();
       await queueConnection.quit();

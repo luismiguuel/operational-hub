@@ -12,3 +12,13 @@ export const aiQueue = new Queue<{ projectId: string; actorId: string }>('projec
     removeOnFail: { age: 86400, count: 200 },
   },
 });
+
+export const knowledgeQueue = new Queue<{ documentId: string }>('knowledge-index', {
+  connection: queueConnection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 2000 },
+    removeOnComplete: 100,
+    removeOnFail: 100,
+  },
+});

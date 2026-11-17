@@ -1,3 +1,4 @@
+import { localEmbedding } from '../core/knowledge.js';
 import argon2 from 'argon2';
 import { z } from 'zod';
 import { areas } from '@hub/shared';
@@ -101,6 +102,33 @@ try {
       "INSERT INTO users(id,name,email,role,area,subarea,title,weekly_hours,password_hash) VALUES($1,'Administrador',$2,'ADMIN','Tech','Dev','Diretoria',20,$3) ON CONFLICT(email) DO NOTHING RETURNING id",
       [adminId, email, hash],
     );
+    const owner = (
+      await client.query<{ id: string }>('SELECT id FROM users WHERE email=$1', [email])
+    ).rows[0];
+    if (owner)
+      for (const [documentId, title, category, content] of [
+        [
+          '40000000-0000-4000-8000-000000000001',
+          'Arquitetura do CITi Hub',
+          'ADR',
+          'O CITi Hub usa TypeScript estrito em monorepo pnpm. A API Fastify compartilha contratos Zod com a SPA React. PostgreSQL persiste tarefas e auditoria; Redis distribui eventos e filas.',
+        ],
+        [
+          '40000000-0000-4000-8000-000000000002',
+          'Checklist de handover',
+          'HANDOVER',
+          'Ao transferir um projeto, registre decisões técnicas, pendências, critérios de aceite e links dos artefatos. Confirme os responsáveis e documente como iniciar o ambiente local. Nunca registre senhas ou tokens no handover.',
+        ],
+      ]) {
+        await client.query(
+          "INSERT INTO knowledge_documents(id,title,category,content,created_by,status,indexed_at) VALUES($1,$2,$3,$4,$5,'INDEXED',now()) ON CONFLICT(id) DO NOTHING",
+          [documentId, title, category, content, owner.id],
+        );
+        await client.query(
+          'INSERT INTO knowledge_chunks(id,document_id,chunk_index,content,embedding) VALUES($1,$2,0,$3,$4::vector) ON CONFLICT(document_id,chunk_index) DO NOTHING',
+          [crypto.randomUUID(), documentId, content, JSON.stringify(localEmbedding(content ?? ''))],
+        );
+      }
     if (process.env['SEED_DEMO'] !== 'true' || !inserted.rowCount) return;
     // Illustrative dataset; opt-in and only inserted with a newly created administrator.
     const projectId = crypto.randomUUID(),
