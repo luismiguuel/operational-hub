@@ -355,3 +355,54 @@ export const bulkProvisionMembersSchema = z
 export type OrgTaxonomy = z.infer<typeof orgTaxonomySchema>;
 export type UpdateMemberAdmin = z.infer<typeof updateMemberAdminSchema>;
 export type BulkProvisionMembers = z.infer<typeof bulkProvisionMembersSchema>;
+
+export const knowledgeCategorySchema = z.enum([
+  'ADR',
+  'HANDOVER',
+  'SCOPE',
+  'RETROSPECTIVE',
+  'PROCESS',
+]);
+export const createKnowledgeDocumentSchema = z
+  .object({
+    title: z.string().trim().min(3).max(180),
+    category: knowledgeCategorySchema,
+    content: z.string().trim().min(20).max(80000),
+    projectId: id.nullable().optional(),
+  })
+  .strict();
+export const queryKnowledgeSchema = z
+  .object({
+    question: z.string().trim().min(3).max(2000),
+    projectId: id.nullable().optional(),
+    limit: z.number().int().min(1).max(10).default(5),
+  })
+  .strict();
+export const knowledgeDocumentSchema = createKnowledgeDocumentSchema.extend({
+  id,
+  projectId: id.nullable(),
+  status: z.enum(['PENDING', 'INDEXED', 'FAILED']),
+  errorMessage: z.string().nullable(),
+  createdBy: id,
+  indexedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export const knowledgeQueryResponseSchema = z.object({
+  answer: z.string(),
+  citations: z.array(
+    z.object({
+      documentId: id,
+      documentTitle: z.string(),
+      category: knowledgeCategorySchema,
+      projectId: id.nullable(),
+      projectName: z.string().nullable(),
+      snippet: z.string(),
+      score: z.number(),
+    }),
+  ),
+  mode: z.enum(['LLM', 'EXTRACTIVE_FALLBACK']),
+});
+export type KnowledgeDocument = z.infer<typeof knowledgeDocumentSchema>;
+export type KnowledgeQueryResponse = z.infer<typeof knowledgeQueryResponseSchema>;
+export type CreateKnowledgeDocument = z.infer<typeof createKnowledgeDocumentSchema>;
