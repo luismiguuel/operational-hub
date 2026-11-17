@@ -100,11 +100,18 @@ export const taskSchema = taskInput.extend({
   projectId: id,
   status: statusSchema,
   version: z.number().int(),
+  backlogPosition: z.number().int().nonnegative(),
   createdBy: id,
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 export type Task = z.infer<typeof taskSchema>;
+export const reorderBacklogSchema = z.object({ orderedTaskIds: z.array(id).min(1) }).strict();
+export type ReorderBacklogInput = z.infer<typeof reorderBacklogSchema>;
+export const pullBacklogToSprintSchema = z
+  .object({ taskIds: z.array(id).min(1), targetSprintId: id })
+  .strict();
+export type PullBacklogToSprintInput = z.infer<typeof pullBacklogToSprintSchema>;
 export const taskPatch = taskInput
   .partial()
   .extend({ status: statusSchema.optional(), version: z.number().int().positive() })
