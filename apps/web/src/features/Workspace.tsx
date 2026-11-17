@@ -10,6 +10,13 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { z } from 'zod';
 import {
@@ -36,6 +43,10 @@ import {
   Clock3,
   Link,
   Check,
+  GripVertical,
+  ArrowDownToLine,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import rehypeSanitize from 'rehype-sanitize';
@@ -58,6 +69,8 @@ export function Workspace({ project }: { project: Project }) {
     [selected, setSelected] = useState<string | null>(null),
     [sprintDialog, setSprintDialog] = useState(false),
     [summaryOpen, setSummaryOpen] = useState(false),
+    [pullCount, setPullCount] = useState(3),
+    [targetSprintId, setTargetSprintId] = useState(''),
     [jobId, setJobId] = useState<string | null>(null);
   const tasks = useQuery({
     queryKey: ['tasks', project.id],
@@ -98,6 +111,48 @@ export function Workspace({ project }: { project: Project }) {
       void client.invalidateQueries({ queryKey: ['heat'] });
     },
   });
+  const reorderBacklog = useMutation({
+    mutationFn: (orderedTaskIds: string[]) =>
+      api(
+        `/projects/${project.id}/backlog/reorder`,
+        z.object({ ok: z.boolean(), orderedTaskIds: z.array(z.string().uuid()) }),
+        patch({ orderedTaskIds }),
+      ),
+    onMutate: async (orderedTaskIds) => {
+      await client.cancelQueries({ queryKey: ['tasks', project.id] });
+      const previous = client.getQueryData<Task[]>(['tasks', project.id]);
+      client.setQueryData<Task[]>(['tasks', project.id], (old) => {
+        if (!old) return old;
+        const rank = new Map(orderedTaskIds.map((taskId, index) => [taskId, index]));
+        return old.map((task) =>
+          task.sprintId === null && rank.has(task.id)
+            ? { ...task, backlogPosition: rank.get(task.id) ?? task.backlogPosition }
+            : task,
+        );
+      });
+      return { previous };
+    },
+    onError: (_error, _orderedTaskIds, context) => {
+      if (context?.previous) client.setQueryData(['tasks', project.id], context.previous);
+    },
+    onSettled: () => void client.invalidateQueries({ queryKey: ['tasks', project.id] }),
+  });
+  const pullToSprint = useMutation({
+    mutationFn: ({ taskIds, sprintId }: { taskIds: string[]; sprintId: string }) =>
+      api(
+        `/projects/${project.id}/backlog/pull-to-sprint`,
+        z.object({ ok: z.boolean(), movedCount: z.number(), targetSprintId: z.string().uuid() }),
+        post({ taskIds, targetSprintId: sprintId }),
+      ),
+    onSuccess: (result) => {
+      void client.invalidateQueries({ queryKey: ['tasks', project.id] });
+      void client.invalidateQueries({ queryKey: ['sprints', project.id] });
+      void client.invalidateQueries({ queryKey: ['metrics', project.id] });
+      void client.invalidateQueries({ queryKey: ['activity', project.id] });
+      void client.invalidateQueries({ queryKey: ['mine'] });
+      setTargetSprintId(result.targetSprintId);
+    },
+  });
   const ai = useMutation({
     mutationFn: () =>
       api(`/projects/${project.id}/ai/summary`, z.object({ id: z.string() }), post({})),
@@ -114,6 +169,10 @@ export function Workspace({ project }: { project: Project }) {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor),
   );
+  const backlogSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
   const visible = (tasks.data ?? []).filter(
     (t) =>
       t.title.toLowerCase().includes(search.toLowerCase()) &&
@@ -126,6 +185,14 @@ export function Workspace({ project }: { project: Project }) {
   const boardTasks = visible.filter((t) => t.kind === 'TASK'),
     done = boardTasks.filter((t) => t.status === 'DONE').length,
     points = boardTasks.reduce((sum, t) => sum + t.points, 0);
+  const backlog = (tasks.data ?? [])
+    .filter((task) => task.sprintId === null)
+    .sort(
+      (a, b) => a.backlogPosition - b.backlogPosition || a.createdAt.localeCompare(b.createdAt),
+    );
+  const visibleBacklog = visible.filter((task) => task.sprintId === null);
+  const plannedSprints = (sprints.data ?? []).filter((sprint) => sprint.state === 'PLANNED');
+  const canPrioritize = Boolean(manager) && !project.archived && !search && !mine && !priority;
   const canMove = (task: Task) =>
     !project.archived &&
     !move.isPending &&
@@ -224,7 +291,11 @@ export function Workspace({ project }: { project: Project }) {
         </div>
         <span className="quiet">{points} story points na visão</span>
       </div>
-      <ErrorMessage error={tasks.error ?? sprints.error ?? move.error} />
+      <ErrorMessage
+        error={
+          tasks.error ?? sprints.error ?? move.error ?? reorderBacklog.error ?? pullToSprint.error
+        }
+      />
       {tasks.isPending && (
         <p role="status" className="muted">
           Carregando workspace…
@@ -332,26 +403,141 @@ export function Workspace({ project }: { project: Project }) {
               </div>
             </DndContext>
           ) : (
-            <div className="backlog">
-              {visible.length === 0 && (
-                <Empty
-                  title="Espaço para o próximo impacto"
-                  detail="Crie uma tarefa ou ajuste os filtros para encontrar itens do backlog."
-                />
-              )}
-              {visible.map((task) => (
-                <button className="backlog-row" key={task.id} onClick={() => setSelected(task.id)}>
-                  <span className={`priority-dot ${task.priority.toLowerCase()}`} />
-                  <span className="task-code">
-                    {task.kind === 'EPIC' ? 'ÉPICO' : task.id.slice(0, 6).toUpperCase()}
+            <>
+              <div className="backlog-tools">
+                <div>
+                  <strong>Prioridade do backlog</strong>
+                  <span className="quiet">
+                    {canPrioritize
+                      ? 'Arraste pelo controle ou use os botões para alterar a ordem.'
+                      : manager
+                        ? 'Limpe os filtros para reordenar as tarefas.'
+                        : 'A ordem é gerenciada pela liderança do projeto.'}
                   </span>
-                  <strong>{task.title}</strong>
-                  <span className="tag">{task.points} pts</span>
-                  <span className="quiet">{dateLabel(task.dueDate)}</span>
-                  <ArrowUpRight size={17} />
-                </button>
-              ))}
-            </div>
+                </div>
+                <div className="backlog-pull-controls">
+                  <label>
+                    Sprint planejada
+                    <select
+                      value={targetSprintId}
+                      onChange={(event) => setTargetSprintId(event.target.value)}
+                      disabled={!plannedSprints.length || !manager || project.archived}
+                    >
+                      <option value="">Selecionar sprint</option>
+                      {plannedSprints.map((sprint) => (
+                        <option key={sprint.id} value={sprint.id}>
+                          {sprint.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="backlog-count">
+                    Itens
+                    <input
+                      type="number"
+                      min={1}
+                      max={Math.max(1, backlog.length)}
+                      value={pullCount}
+                      onChange={(event) =>
+                        setPullCount(Math.max(1, Number(event.target.value) || 1))
+                      }
+                      disabled={!backlog.length}
+                    />
+                  </label>
+                  <button
+                    className="secondary backlog-pull-button"
+                    disabled={
+                      !manager ||
+                      project.archived ||
+                      !targetSprintId ||
+                      !backlog.length ||
+                      pullToSprint.isPending
+                    }
+                    onClick={() =>
+                      pullToSprint.mutate({
+                        taskIds: backlog.slice(0, pullCount).map((task) => task.id),
+                        sprintId: targetSprintId,
+                      })
+                    }
+                  >
+                    <ArrowDownToLine size={15} /> Puxar top {Math.min(pullCount, backlog.length)}
+                  </button>
+                </div>
+                {!plannedSprints.length && (
+                  <span className="quiet backlog-note">
+                    Crie uma sprint planejada para puxar itens do backlog.
+                  </span>
+                )}
+              </div>
+              {pullToSprint.isSuccess && (
+                <p role="status" className="backlog-success">
+                  Tarefas adicionadas à sprint planejada.
+                </p>
+              )}
+              <div className="backlog">
+                {visibleBacklog.length === 0 && (
+                  <Empty
+                    title="Backlog vazio"
+                    detail="Crie uma tarefa ou ajuste os filtros para encontrar itens."
+                  />
+                )}
+                <DndContext
+                  sensors={backlogSensors}
+                  onDragEnd={({ active: dragged, over }) => {
+                    if (!over || dragged.id === over.id || !canPrioritize) return;
+                    const oldIndex = backlog.findIndex((task) => task.id === dragged.id);
+                    const newIndex = backlog.findIndex((task) => task.id === over.id);
+                    if (oldIndex < 0 || newIndex < 0) return;
+                    reorderBacklog.mutate(
+                      arrayMove(backlog, oldIndex, newIndex).map((task) => task.id),
+                    );
+                  }}
+                >
+                  <SortableContext
+                    items={visibleBacklog.map((task) => task.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {visibleBacklog.map((task) => (
+                      <SortableBacklogRow
+                        key={task.id}
+                        task={task}
+                        rank={backlog.findIndex((item) => item.id === task.id) + 1}
+                        total={backlog.length}
+                        disabled={!canPrioritize || reorderBacklog.isPending}
+                        onOpen={() => setSelected(task.id)}
+                        onMove={(direction) => {
+                          const index = backlog.findIndex((item) => item.id === task.id);
+                          const nextIndex = index + direction;
+                          if (index >= 0 && nextIndex >= 0 && nextIndex < backlog.length)
+                            reorderBacklog.mutate(
+                              arrayMove(backlog, index, nextIndex).map((item) => item.id),
+                            );
+                        }}
+                        onMoveToTop={() => {
+                          if (backlog[0]?.id !== task.id)
+                            reorderBacklog.mutate([
+                              task.id,
+                              ...backlog
+                                .filter((item) => item.id !== task.id)
+                                .map((item) => item.id),
+                            ]);
+                        }}
+                        onSend={() => {
+                          if (targetSprintId)
+                            pullToSprint.mutate({ taskIds: [task.id], sprintId: targetSprintId });
+                        }}
+                        canSend={
+                          Boolean(manager) &&
+                          !project.archived &&
+                          Boolean(targetSprintId) &&
+                          !pullToSprint.isPending
+                        }
+                      />
+                    ))}
+                  </SortableContext>
+                </DndContext>
+              </div>
+            </>
           )}
         </>
       )}
@@ -395,6 +581,97 @@ export function Workspace({ project }: { project: Project }) {
         )}
       </Modal>
     </>
+  );
+}
+function SortableBacklogRow({
+  task,
+  rank,
+  total,
+  disabled,
+  onOpen,
+  onMove,
+  onMoveToTop,
+  onSend,
+  canSend,
+}: {
+  task: Task;
+  rank: number;
+  total: number;
+  disabled: boolean;
+  onOpen: () => void;
+  onMove: (direction: -1 | 1) => void;
+  onMoveToTop: () => void;
+  onSend: () => void;
+  canSend: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: task.id,
+    disabled,
+  });
+  return (
+    <article
+      ref={setNodeRef}
+      className={`backlog-row ${isDragging ? 'is-dragging' : ''}`}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+    >
+      <span className="backlog-rank" aria-label={`Prioridade ${rank}`}>
+        {rank}
+      </span>
+      <button
+        className="backlog-drag-handle"
+        type="button"
+        aria-label={`Reordenar ${task.title}`}
+        disabled={disabled}
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical size={16} aria-hidden="true" />
+      </button>
+      <span className={`priority-dot ${task.priority.toLowerCase()}`} />
+      <span className="task-code">
+        {task.kind === 'EPIC' ? 'ÉPICO' : task.id.slice(0, 6).toUpperCase()}
+      </span>
+      <button className="backlog-task-open" type="button" onClick={onOpen}>
+        <strong>{task.title}</strong>
+      </button>
+      <span className="tag">{task.points} pts</span>
+      <span className="quiet">{dateLabel(task.dueDate)}</span>
+      <button
+        className="backlog-send-button"
+        type="button"
+        disabled={!canSend}
+        aria-label={`Enviar ${task.title} para a sprint selecionada`}
+        onClick={onSend}
+      >
+        Enviar
+      </button>
+      <div className="backlog-order-actions" aria-label={`Ações de prioridade para ${task.title}`}>
+        <button
+          type="button"
+          aria-label={`Mover ${task.title} para cima`}
+          disabled={disabled || rank === 1}
+          onClick={() => onMove(-1)}
+        >
+          <ChevronUp size={15} />
+        </button>
+        <button
+          type="button"
+          aria-label={`Mover ${task.title} para baixo`}
+          disabled={disabled || rank === total}
+          onClick={() => onMove(1)}
+        >
+          <ChevronDown size={15} />
+        </button>
+        <button
+          type="button"
+          aria-label={`Mover ${task.title} para o topo`}
+          disabled={disabled || rank === 1}
+          onClick={onMoveToTop}
+        >
+          <ArrowUpRight size={15} />
+        </button>
+      </div>
+    </article>
   );
 }
 function Column({

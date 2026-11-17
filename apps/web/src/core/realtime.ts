@@ -30,7 +30,10 @@ export function useProjectRoom(projectId: string) {
             message.type === 'ready' ||
             message.type === 'TaskStatusChanged' ||
             message.type === 'TaskCarriedOver' ||
-            message.type === 'SprintClosed'
+            message.type === 'SprintClosed' ||
+            message.type === 'BacklogReordered' ||
+            message.type === 'TaskPulledToSprint' ||
+            message.type === 'BacklogPulledToSprint'
           ) {
             void client.invalidateQueries({ queryKey: ['tasks', projectId] });
             void client.invalidateQueries({ queryKey: ['mine'] });
