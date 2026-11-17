@@ -117,7 +117,7 @@ function App() {
         </div>
         <nav className="project-navigation" aria-label="Projetos">
           {projects.data
-            ?.filter((p) => !p.archived)
+            ?.filter((p) => !p.archived && p.name.trim().toLowerCase() !== 'memória institucional')
             .map((p, index) => (
               <button
                 key={p.id}

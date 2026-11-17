@@ -129,14 +129,20 @@ try {
           [crypto.randomUUID(), documentId, content, JSON.stringify(localEmbedding(content ?? ''))],
         );
       }
+    await client.query(
+      "UPDATE knowledge_documents SET project_id=NULL WHERE project_id IN (SELECT id FROM projects WHERE lower(name)='memória institucional')",
+    );
+    await client.query(
+      "DELETE FROM allocations WHERE project_id IN (SELECT id FROM projects WHERE lower(name)='memória institucional')",
+    );
+    await client.query("DELETE FROM projects WHERE lower(name)='memória institucional'");
     if (process.env['SEED_DEMO'] !== 'true' || !inserted.rowCount) return;
     // Illustrative dataset; opt-in and only inserted with a newly created administrator.
     const projectId = crypto.randomUUID(),
-      internalId = crypto.randomUUID(),
       sprintId = crypto.randomUUID();
     await client.query(
-      "INSERT INTO projects(id,name,description,kind) VALUES($1,'Portal do cliente','Dados ilustrativos • Experiência digital para acompanhamento de entregas.','EXTERNAL'),($2,'Memória institucional','Dados ilustrativos • Conhecimento que atravessa gestões.','INTERNAL')",
-      [projectId, internalId],
+      "INSERT INTO projects(id,name,description,kind) VALUES($1,'Portal do cliente','Dados ilustrativos • Experiência digital para acompanhamento de entregas.','EXTERNAL')",
+      [projectId],
     );
     const members = [
       {
@@ -190,8 +196,8 @@ try {
       );
     }
     await client.query(
-      "INSERT INTO allocations(project_id,user_id,role,weekly_hours) VALUES($1,$2,'LEADER',8),($3,$2,'LEADER',6)",
-      [projectId, adminId, internalId],
+      "INSERT INTO allocations(project_id,user_id,role,weekly_hours) VALUES($1,$2,'LEADER',8)",
+      [projectId, adminId],
     );
     await client.query(
       "INSERT INTO sprints(id,project_id,name,goal,starts_on,ends_on,state) VALUES($1,$2,'Sprint 01','Validar a primeira jornada do cliente.',current_date,current_date+14,'ACTIVE')",
