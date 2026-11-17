@@ -7,8 +7,23 @@ import { taskColumns } from '../core/records.js';
 import { authenticate } from './auth.js';
 import { projectAccess } from '../core/access.js';
 import { config } from '../core/config.js';
+import { getAllocationRadar } from '../core/health-and-radar.service.js';
 export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', authenticate);
+  app.get('/allocation/radar', async (request) => {
+    const profile = z
+      .object({ area: z.string() })
+      .parse(
+        found((await db.query('SELECT area FROM users WHERE id=$1', [request.actor.id])).rows[0]),
+      );
+    if (
+      request.actor.role !== 'ADMIN' &&
+      request.actor.role !== 'LEADER' &&
+      profile.area !== 'Gente e Gestão'
+    )
+      throw new HttpError(403, 'Visão exclusiva da liderança e Gente e Gestão.');
+    return getAllocationRadar();
+  });
   app.get('/me/tasks', async (request) =>
     z
       .array(taskSchema)

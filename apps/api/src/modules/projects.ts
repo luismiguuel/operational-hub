@@ -14,9 +14,20 @@ import { db, transaction, found, HttpError } from '../core/db.js';
 import { projectAccess, audit } from '../core/access.js';
 import { authenticate, requireAdmin } from './auth.js';
 import { sprintColumns } from '../core/records.js';
+import {
+  getProjectHealth,
+  listProjectHealth,
+  assertProjectVisible,
+} from '../core/health-and-radar.service.js';
 const params = z.object({ projectId: id });
 export async function projectRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', authenticate);
+  app.get('/projects/health', async (request) => listProjectHealth(request.actor));
+  app.get('/projects/:projectId/health', async (request) => {
+    const { projectId } = params.parse(request.params);
+    await assertProjectVisible(request.actor, projectId);
+    return getProjectHealth(request.actor, projectId);
+  });
   app.get('/projects', async (request) => {
     const result = await db.query(
       `SELECT p.*,a.role AS "myRole" FROM projects p LEFT JOIN allocations a ON a.project_id=p.id AND a.user_id=$1 WHERE ($2::boolean OR a.user_id IS NOT NULL) ORDER BY p.archived,p.name`,
