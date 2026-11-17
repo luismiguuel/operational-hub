@@ -43,7 +43,7 @@ Abra <http://localhost:5173>. Em outro terminal, com Node 22 ativo, execute `pnp
 - OAuth Google Workspace com PKCE, state, nonce, validação OIDC e vínculo apenas a usuários previamente provisionados; login local Argon2id para o administrador inicial.
 - JWT de 15 minutos mantido em memória; refresh rotativo em cookie HttpOnly/SameSite=Strict, com detecção de replay por família. Secure obrigatório em produção; exceção explícita em HTTP local.
 - WebSockets autenticados por primeira mensagem, segmentados por projeto, com revalidação de vínculo a cada entrega e reconexão do cliente. Nenhum token em URL.
-- PostgreSQL/pgvector, índices GIN, tabela e índice vetorial para a futura memória institucional; Redis para cache, rate limit, Pub/Sub e BullMQ; auditoria append-only e outbox transacional.
+- Memória Institucional com documentos e chunks em pgvector, indexação BullMQ, busca semântica com citações, auditoria e outbox. OpenAI/Gemini são opcionais; sem chave, o embedding hash determinístico e a síntese extrativa local mantêm o fluxo disponível. O RBAC separa documentos globais dos escopos de projeto.
 - Resumo de projeto por IA, assíncrono, autorizado, auditado e sujeito a revisão humana. Sem chave, a API retorna 503 explicando a configuração ausente.
 
 ## Configurar integrações
@@ -88,7 +88,7 @@ apps/web/src/
 packages/shared/src/  schemas Zod, DTOs, RBAC e eventos
 ```
 
-Consulte [arquitetura e limites](docs/architecture.md) e [contrato REST](docs/api.md). As taxonomias organizacionais são configuráveis pela diretoria; o papel de sistema (`ADMIN`, `LEADER`, `MEMBER`) continua separado do cargo. RAG com ingestão/embeddings/busca, burndown histórico e IA em outros pontos da operação ainda precisam de implementação. Timesheet, financeiro, chat nativo e sincronizações bidirecionais permanecem fora da v1.
+Consulte [arquitetura e limites](docs/architecture.md) e [contrato REST](docs/api.md). As taxonomias organizacionais são configuráveis pela diretoria; o papel de sistema (`ADMIN`, `LEADER`, `MEMBER`) continua separado do cargo. Burndown histórico e IA em outros pontos da operação ainda precisam de implementação. Timesheet, financeiro, chat nativo e sincronizações bidirecionais permanecem fora da v1.
 
 O build da SPA fica em `apps/web/dist`. API e worker executam fontes TypeScript com `tsx`; o build faz verificação/compilação TypeScript. Hospede API/worker em Node com acesso TCP a PostgreSQL/Redis e sirva a SPA com fallback para `index.html`, encaminhando `/api` e upgrades WebSocket à API. Não há publicação externa nem infraestrutura de produção provisionada.
 

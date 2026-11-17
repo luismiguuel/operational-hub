@@ -82,13 +82,13 @@ Helmet, CORS restrito, verificação de Origin em mutações e autenticação ex
 
 O job de resumo transporta apenas ator e projeto. O worker revalida autorização antes de ler contexto e antes de disponibilizar o resultado, limita as tarefas consideradas, trata dados como entrada não confiável e registra metadados da inferência. O resultado é uma sugestão, nunca uma mutação automática. Não há fallback que finja uma resposta de IA quando o provedor está ausente.
 
-`knowledge_chunks` já contém namespace por projeto, metadados JSONB/GIN e vetores de 1536 dimensões com índice HNSW. Essa dimensão deverá ser compatível com o modelo de embedding escolhido. **Ainda não há ingestão, geração de embeddings, busca vetorial ou RAG operacional**. A próxima etapa é indexar decisões/documentos por projeto, validar escopo antes da recuperação e retornar citações para suas fontes. Resumos de sprint, decomposição assistida de backlog, identificação de risco de alocação e onboarding semestral podem reutilizar fila, políticas e auditoria existentes.
+O RAG usa `knowledge_documents` e `knowledge_chunks` com embeddings de 1536 dimensões e busca por similaridade cosseno via pgvector/HNSW. A indexação usa BullMQ em produção; desenvolvimento e testes processam imediatamente. Embeddings OpenAI ou Gemini e síntese LLM são opcionais. Sem chave, em falha de provedor ou em teste, o sistema usa embedding hash local determinístico e resposta extrativa baseada nos trechos recuperados. Consultas sempre aplicam RBAC: documentos globais são acessíveis a membros autenticados e os de projeto só aparecem a usuários vinculados, liderança contextual ou ADMIN. Criação, reindexação, exclusão e processamento registram auditoria e eventos da outbox.
 
 ## Próximos incrementos
 
 1. Convites e recuperação de acesso.
 2. Burndown por dia.
-3. Ingestão/RAG autorizado com citações e exclusão/reindexação de conteúdo.
+3. Métricas de uso e qualidade das consultas RAG.
 4. Outbox para outros eventos e monitoramento de atraso/retries das filas.
 5. Coordenação de refresh entre abas, limites de uso/custo por usuário e cobertura de revogação em sessões longas.
 6. Deploy Node com proxy HTTPS, credenciais de menor privilégio, backups restauráveis e observabilidade.
