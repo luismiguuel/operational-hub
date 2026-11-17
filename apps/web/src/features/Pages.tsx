@@ -1,15 +1,26 @@
+import { HealthBadge } from './HealthBadge';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
-import { heatSchema, projectSchema, taskSchema } from '@hub/shared';
+import {
+  allocationOverloadSummarySchema,
+  projectHealthReportSchema,
+  projectSchema,
+  taskSchema,
+} from '@hub/shared';
 import type { Project } from '@hub/shared';
-import { ArrowUpRight, Plus, BriefcaseBusiness, Layers, Archive, UsersRound } from 'lucide-react';
+import { ArrowUpRight, Plus, BriefcaseBusiness, Layers, Archive } from 'lucide-react';
 import { api, post, patch, ok, useSession, useUI } from '../core/api';
 import { Empty, ErrorMessage, Avatar, Modal, dateLabel } from '../core/components';
 export function Projects({ projects }: { projects: Project[] }) {
   const client = useQueryClient(),
     admin = useSession((s) => s.user?.role === 'ADMIN'),
     setProject = useUI((s) => s.setProject);
+  const health = useQuery({
+    queryKey: ['project-health'],
+    queryFn: () => api('/projects/health', z.array(projectHealthReportSchema)),
+    refetchInterval: 30000,
+  });
   const [open, setOpen] = useState(false),
     [kind, setKind] = useState('ALL');
   const create = useMutation({
@@ -68,6 +79,9 @@ export function Projects({ projects }: { projects: Project[] }) {
                 </span>
               </div>
               <h2>{p.name}</h2>
+              {health.data?.find((report) => report.projectId === p.id) && (
+                <HealthBadge report={health.data.find((report) => report.projectId === p.id)!} />
+              )}
               <p className="muted">{p.description || 'Um novo espaço para construir em equipe.'}</p>
               <div className="project-card-footer">
                 <button className="text-button" onClick={() => setProject(p.id)}>
@@ -176,99 +190,100 @@ export function MySpace({ projects }: { projects: Project[] }) {
   );
 }
 export function Heat() {
-  const heat = useQuery({
-    queryKey: ['heat'],
-    queryFn: () => api('/dashboards/heat', z.array(heatSchema)),
+  const [risk, setRisk] = useState('ALL');
+  const radar = useQuery({
+    queryKey: ['allocation-radar'],
+    queryFn: () => api('/allocation/radar', allocationOverloadSummarySchema),
     refetchInterval: 15000,
   });
-  const rows = heat.data ?? [],
-    total = rows.reduce((s, r) => s + r.capacity, 0),
-    allocated = rows.reduce((s, r) => s + r.allocated, 0);
+  const data = radar.data;
   return (
     <>
       <div className="page-heading">
-        <div>
-          <p className="eyebrow">CUIDAR DE QUEM CONSTRÓI</p>
-          <h1>Mapa de alocação</h1>
-          <p className="muted">Equilibre os projetos com a vida acadêmica de cada pessoa.</p>
-        </div>
-        <UsersRound size={30} className="accent" />
+        <h1>Mapa de alocação</h1>
       </div>
-      <div className="metric-strip">
-        <div>
-          <strong>{rows.length}</strong>
-          <span>pessoas na visão</span>
-        </div>
-        <div>
-          <strong>
-            {total}
-            <small>h</small>
-          </strong>
-          <span>capacidade semanal</span>
-        </div>
-        <div>
-          <strong>
-            {allocated}
-            <small>h</small>
-          </strong>
-          <span>alocadas por semana</span>
-        </div>
-        <div>
-          <strong>{rows.filter((r) => r.allocated > r.capacity).length}</strong>
-          <span>pessoas acima da capacidade</span>
-        </div>
-      </div>
-      <p className="notice">
-        Horas refletem alocações planejadas por projeto. Story points expressam complexidade e não
-        são convertidos em horas. Líderes veem somente seus projetos.
-      </p>
-      <ErrorMessage error={heat.error} />
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Pessoa / área</th>
-              <th>Alocação semanal</th>
-              <th>Ocupação</th>
-              <th>Tarefas abertas</th>
-              <th>Story points</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => {
-              const ratio = row.allocated / row.capacity;
-              return (
-                <tr key={row.userId}>
-                  <td>
-                    <div className="person">
-                      <Avatar name={row.name} />
-                      <div>
-                        <strong>{row.name}</strong>
-                        <small>{row.area}</small>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    {row.allocated}h <span className="quiet">/ {row.capacity}h</span>
-                  </td>
-                  <td>
-                    <div
-                      className={`heat-bar ${ratio > 1 ? 'overloaded' : ratio > 0.8 ? 'busy' : ''}`}
-                    >
-                      <span style={{ width: `${Math.min(ratio, 1) * 100}%` }} />
-                    </div>
-                    <small>
-                      {Math.round(ratio * 100)}% {ratio > 1 ? '· Sobrecarga' : ''}
-                    </small>
-                  </td>
-                  <td>{row.activeTasks}</td>
-                  <td>{row.points}</td>
+      <ErrorMessage error={radar.error} />
+      {radar.isPending && <p role="status">Carregando alocação…</p>}
+      {data && (
+        <>
+          <div className="metric-strip">
+            <div>
+              <strong>{data.totals.overloadedCount}</strong>
+              <span>Membros em Sobrecarga</span>
+            </div>
+            <div>
+              <strong>{data.totals.nearLimitCount}</strong>
+              <span>Próximos do Limite</span>
+            </div>
+            <div>
+              <strong>{data.totals.availableHoursTotal} h</strong>
+              <span>Horas Livres na EJ</span>
+            </div>
+          </div>
+          <label className="radar-filter">
+            Nível de risco
+            <select value={risk} onChange={(e) => setRisk(e.target.value)}>
+              <option value="ALL">Todos</option>
+              <option value="OVERLOADED">Sobrecarga &gt; 100%</option>
+              <option value="NEAR_LIMIT">Limite ≥ 85%</option>
+              <option value="OPTIMAL">Ideal &lt; 85%</option>
+            </select>
+          </label>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Pessoa / área</th>
+                  <th>Alocação semanal</th>
+                  <th>Ocupação</th>
+                  <th>Tarefas abertas</th>
+                  <th>Story points</th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody>
+                {data.members
+                  .filter((m) => risk === 'ALL' || m.riskLevel === risk)
+                  .map((m) => (
+                    <tr key={m.userId}>
+                      <td>
+                        <div className="person">
+                          <Avatar name={m.name} />
+                          <div>
+                            <strong>{m.name}</strong>
+                            <small>{m.area}</small>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        {m.allocatedHours}h / {m.weeklyCapacityHours}h
+                      </td>
+                      <td>
+                        <div
+                          className={`heat-bar ${m.riskLevel === 'OVERLOADED' ? 'overloaded' : m.riskLevel === 'NEAR_LIMIT' ? 'busy' : ''}`}
+                        >
+                          <span style={{ width: `${Math.min(m.utilizationPercent, 100)}%` }} />
+                        </div>
+                        <small>
+                          {m.utilizationPercent}% ·{' '}
+                          {m.riskLevel === 'OVERLOADED'
+                            ? 'Sobrecarga'
+                            : m.riskLevel === 'NEAR_LIMIT'
+                              ? 'Próximo do limite'
+                              : 'Ideal'}
+                        </small>
+                      </td>
+                      <td>{m.activeTasksCount}</td>
+                      <td>{m.activeStoryPoints}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+          {data.members.filter((m) => risk === 'ALL' || m.riskLevel === risk).length === 0 && (
+            <p className="muted">Nenhum membro neste filtro.</p>
+          )}
+        </>
+      )}
     </>
   );
 }

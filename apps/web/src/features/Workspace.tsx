@@ -1,3 +1,5 @@
+import { HealthBadge } from './HealthBadge';
+import { projectHealthReportSchema } from '@hub/shared';
 import { Knowledge } from './knowledge/Knowledge';
 import { useId, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -73,6 +75,12 @@ export function Workspace({ project }: { project: Project }) {
     [pullCount, setPullCount] = useState(3),
     [targetSprintId, setTargetSprintId] = useState(''),
     [jobId, setJobId] = useState<string | null>(null);
+  const health = useQuery({
+    queryKey: ['project-health', project.id],
+    queryFn: () => api(`/projects/${project.id}/health`, projectHealthReportSchema),
+    enabled: !project.archived,
+    refetchInterval: 30000,
+  });
   const tasks = useQuery({
     queryKey: ['tasks', project.id],
     queryFn: () => api(`/projects/${project.id}/tasks`, z.array(taskSchema)),
@@ -234,6 +242,8 @@ export function Workspace({ project }: { project: Project }) {
           </button>
         </div>
       </div>
+      {health.data && <HealthBadge report={health.data} />}
+      <ErrorMessage error={health.error} />
       {project.archived && (
         <p className="notice">Projeto arquivado · workspace disponível para consulta.</p>
       )}

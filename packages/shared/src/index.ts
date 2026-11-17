@@ -264,14 +264,26 @@ export const projectHealthReportSchema = z.object({
 });
 export type ProjectHealthReport = z.infer<typeof projectHealthReportSchema>;
 export const allocationOverloadSummarySchema = z.object({
-  members: z.array(z.object({
-    userId: id, name: z.string(), area: z.string(), role: z.string(),
-    weeklyCapacityHours: z.number().nonnegative(), allocatedHours: z.number().nonnegative(),
-    utilizationPercent: z.number().nonnegative(), activeTasksCount: z.number().int().nonnegative(),
-    activeStoryPoints: z.number().int().nonnegative(),
-    riskLevel: z.enum(['OPTIMAL', 'NEAR_LIMIT', 'OVERLOADED']),
-  })),
-  totals: z.object({ totalMembers: z.number().int().nonnegative(), overloadedCount: z.number().int().nonnegative(), nearLimitCount: z.number().int().nonnegative(), availableHoursTotal: z.number().nonnegative() }),
+  members: z.array(
+    z.object({
+      userId: id,
+      name: z.string(),
+      area: z.string(),
+      role: z.string(),
+      weeklyCapacityHours: z.number().nonnegative(),
+      allocatedHours: z.number().nonnegative(),
+      utilizationPercent: z.number().nonnegative(),
+      activeTasksCount: z.number().int().nonnegative(),
+      activeStoryPoints: z.number().int().nonnegative(),
+      riskLevel: z.enum(['OPTIMAL', 'NEAR_LIMIT', 'OVERLOADED']),
+    }),
+  ),
+  totals: z.object({
+    totalMembers: z.number().int().nonnegative(),
+    overloadedCount: z.number().int().nonnegative(),
+    nearLimitCount: z.number().int().nonnegative(),
+    availableHoursTotal: z.number().nonnegative(),
+  }),
 });
 export type AllocationOverloadSummary = z.infer<typeof allocationOverloadSummarySchema>;
 export const aiJobSchema = z.object({
