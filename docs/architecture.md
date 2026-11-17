@@ -52,6 +52,8 @@ Mutações no workspace serializam pelo registro do projeto e bloqueiam tarefas/
 
 Sprint planejada aceita mudanças. Após iniciar, a composição, pontos e hierarquia do escopo ficam congelados. Status e conteúdo continuam editáveis durante a execução; sprint encerrada não aceita alterações de tarefas. O encerramento de uma sprint ativa permite carryover para o backlog ou para uma sprint `PLANNED` do mesmo projeto. A diretoria (`ADMIN`) ou liderança contextual confirma o destino em um modal com contagens e pontos de tarefas concluídas e pendentes. Projeto arquivado fica para leitura.
 
+A ordem do backlog é persistida em `tasks.backlog_position`, particionada por projeto, e carregada por `GET /projects/:projectId/tasks`. `PATCH /projects/:projectId/backlog/reorder` aceita uma lista ordenada (inclusive um prefixo) e preserva a cauda existente; valida o vínculo contextual e grava posições, auditoria e evento na outbox atomicamente. A UI permite reordenar com drag-and-drop, teclado e controles de subir/descer/topo, com atualização otimista e rollback em falha. `POST /projects/:projectId/backlog/pull-to-sprint` envia tarefas do backlog para uma sprint `PLANNED` do mesmo projeto, incrementa as versões e registra atividade, auditoria e evento na outbox. A interface permite envio individual ou seleção do top N para uma sprint planejada.
+
 A alteração de status grava tarefa, atividade, auditoria e `TaskStatusChanged` na outbox **na mesma transação**. O worker busca lotes com `FOR UPDATE SKIP LOCKED`, publica em Redis e marca o envio. Uma falha após publicar e antes de confirmar pode duplicar o evento: a entrega é **pelo menos uma vez**, não exatamente uma vez. Clientes invalidam queries, uma operação idempotente. Redis Pub/Sub não retém eventos para clientes desconectados; a reconexão e o polling refazem a leitura autoritativa. O worker deve estar ativo para publicação da outbox.
 
 O cache do mapa dura 15 segundos, é separado por usuário, conjunto atual de projetos autorizados e revisão. Validação do escopo ocorre antes de ler o cache. Alterações de status incrementam a revisão; alterações de capacidade/alocação convergem pelo TTL. WebSockets revalidam conta e vínculo por entrega e fecham na expiração do access token; reconexões usam backoff e refresh.
@@ -85,7 +87,7 @@ O job de resumo transporta apenas ator e projeto. O worker revalida autorizaçã
 ## Próximos incrementos
 
 1. Convites e recuperação de acesso.
-2. Ordenação manual do backlog e burndown por dia.
+2. Burndown por dia.
 3. Ingestão/RAG autorizado com citações e exclusão/reindexação de conteúdo.
 4. Outbox para outros eventos e monitoramento de atraso/retries das filas.
 5. Coordenação de refresh entre abas, limites de uso/custo por usuário e cobertura de revogação em sessões longas.
