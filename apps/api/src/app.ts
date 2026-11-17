@@ -17,6 +17,7 @@ import { taskRoutes } from './modules/tasks.js';
 import { dashboardRoutes } from './modules/dashboards.js';
 import { realtimeRoutes } from './modules/realtime.js';
 import { orgRoutes } from './modules/org.js';
+import { backlogRoutes } from './modules/backlog.js';
 export async function buildApp() {
   const app = Fastify({
     logger: {
@@ -82,6 +83,7 @@ export async function buildApp() {
     authRoutes,
     directoryRoutes,
     orgRoutes,
+    backlogRoutes,
     projectRoutes,
     taskRoutes,
     dashboardRoutes,

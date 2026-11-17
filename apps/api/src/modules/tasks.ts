@@ -87,7 +87,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       .parse(
         (
           await db.query(
-            `SELECT ${taskColumns} FROM tasks WHERE project_id=$1 ORDER BY CASE priority WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END,created_at`,
+            `SELECT ${taskColumns} FROM tasks WHERE project_id=$1 ORDER BY CASE WHEN sprint_id IS NULL THEN 0 ELSE 1 END,CASE WHEN sprint_id IS NULL THEN backlog_position END,CASE WHEN sprint_id IS NOT NULL THEN CASE priority WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END END,created_at,id`,
             [projectId],
           )
         ).rows,
