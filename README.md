@@ -1,105 +1,64 @@
-# CITi Hub · Operational Hub
+# CITi Hub
 
-Fundação de um sistema de gestão para Empresas Juniores. Monorepo TypeScript estrito, ESM, monólito modular com eventos e SPA React. A marca **CITi Hub** e os grafismos são placeholders originais; a apresentação usa a skill [citi-visual-language](.agents/skills/citi-visual-language/SKILL.md).
+Plataforma operacional para Empresas Juniores. Centraliza projetos, pessoas, planejamento ágil e conhecimento institucional.
 
-## Início Rápido (1 Comando)
+## Sobre o projeto
 
-Requisitos: Node **>=22.13.0**, pnpm **10.32.1**, Docker e Docker Compose.
-Após clonar e instalar as dependências:
+O CITi Hub reúne gestão de projetos com backlog priorizado, sprints e carryover transacional; gestão de pessoas, áreas e capacidade semanal; termômetro de saúde dos projetos; radar de sobrecarga; e Memória Institucional com busca RAG usando `pgvector` e processamento assíncrono com BullMQ.
+
+## Arquitetura e stack
+
+- `apps/api`: API Fastify em TypeScript, PostgreSQL com `pgvector`, Redis e workers BullMQ.
+- `apps/web`: SPA React com Vite, Tailwind CSS e TanStack Query.
+- `packages/shared`: schemas Zod, tipos e contratos compartilhados.
+
+## Pré-requisitos
+
+- Node.js `>=22.13.0` (há versões padrão em `.nvmrc` e `.node-version`).
+- pnpm `10.32.1`.
+- Docker com Docker Compose, para executar PostgreSQL e Redis localmente.
+
+## Executar localmente
+
+Clone o repositório e instale as dependências:
 
 ```bash
-nvm install 22
-nvm use
+git clone <url-do-repositorio>
+cd operational-hub
 corepack enable
 corepack prepare pnpm@10.32.1 --activate
 pnpm install --frozen-lockfile
+```
+
+Prepare o ambiente e o banco. O setup cria `.env` a partir de `.env.example` se necessário, inicia os serviços definidos em `compose.yaml`, aplica as migrações e executa o seed:
+
+```bash
 pnpm run setup
+```
+
+Inicie a aplicação e o worker em terminais separados:
+
+```bash
+# Terminal 1: API e frontend
 pnpm dev
 ```
 
-Use `pnpm run setup` e `pnpm run doctor` explicitamente: `pnpm setup` e `pnpm doctor` podem executar comandos internos do próprio pnpm.
-O setup preserva `.env` existente, inicia o Compose (`compose.yaml`), aplica migrações e executa o seed idempotente. O exemplo contém credenciais ilustrativas locais; substitua segredos e senhas em produção. Contas existentes preservam suas senhas. Os dados demo só são criados junto de um administrador novo.
-
-Abra <http://localhost:5173>. Em outro terminal, com Node 22 ativo, execute `pnpm worker` para publicar eventos e processar IA. O worker sozinho não inicia o site.
-
-| Problema                    | Solução                                                                                                      |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Node antigo / `node:sqlite` | Execute `nvm install 22 && nvm use` em cada terminal.                                                        |
-| Docker parado               | Inicie o Docker e repita `pnpm run setup`.                                                                   |
-| `.env` ausente              | Execute `pnpm run setup`.                                                                                    |
-| Porta ocupada               | Pare o processo anterior; para PostgreSQL/Redis, altere a porta do Compose e a URL correspondente no `.env`. |
-| Site indisponível           | Execute `pnpm dev`; mantenha o terminal aberto.                                                              |
-
-## Entrega desta fundação
-
-- Diretório de pessoas com área, subárea, cargo, capacidade semanal e papel de sistema independente da área. Criação/edição pela diretoria; ativação/desativação via API.
-- Gestão dinâmica pela diretoria de áreas, subáreas e cargos, com carga CSV em lote, detecção de e-mails existentes e contas inativas preservadas no histórico.
-- Catálogo externo/interno, criação, arquivamento/reativação e alocações contextuais com horas planejadas.
-- Épicos e tarefas, backlog por `sprintId=null`, prioridades, pontos Fibonacci, tags, Markdown sanitizado, responsável único opcional no planejamento, checklist, links HTTPS e comentários.
-- Priorização persistida do backlog por projeto, com reordenação por drag-and-drop, teclado ou controles acessíveis. Lideranças podem enviar uma tarefa individual ou puxar as Top N para uma sprint `PLANNED`; alterações validam o projeto e ficam registradas na auditoria e na outbox.
-- Sprints planejadas/ativas/encerradas. Planeje o escopo **antes** de iniciar. Apenas uma sprint ativa por projeto. Inclusão, remoção e alteração de pontos/épico/tipo são bloqueadas após o início. Ao encerrar, devolva itens pendentes ao backlog (padrão) ou mova-os para uma sprint planejada do mesmo projeto. O status das tarefas é preservado, a versão é incrementada e a sprint recebe `closed_at`. Tarefas concluídas permanecem na sprint original; a velocidade considera apenas seus story points. Reabertura permanece fora desta entrega.
-- Kanban com `@dnd-kit`, atualizações otimistas, rollback em erro, concorrência por versão e seletor de status acessível por teclado.
-- Meu Espaço, mapa de alocação, totais de entrega e velocidade das últimas seis sprints encerradas. Horas e story points permanecem medidas independentes.
-- OAuth Google Workspace com PKCE, state, nonce, validação OIDC e vínculo apenas a usuários previamente provisionados; login local Argon2id para o administrador inicial.
-- JWT de 15 minutos mantido em memória; refresh rotativo em cookie HttpOnly/SameSite=Strict, com detecção de replay por família. Secure obrigatório em produção; exceção explícita em HTTP local.
-- WebSockets autenticados por primeira mensagem, segmentados por projeto, com revalidação de vínculo a cada entrega e reconexão do cliente. Nenhum token em URL.
-- Memória Institucional com documentos e chunks em pgvector, indexação BullMQ, busca semântica com citações, auditoria e outbox. OpenAI/Gemini são opcionais; sem chave, o embedding hash determinístico e a síntese extrativa local mantêm o fluxo disponível. O RBAC separa documentos globais dos escopos de projeto.
-- Resumo de projeto por IA, assíncrono, autorizado, auditado e sujeito a revisão humana. Sem chave, a API retorna 503 explicando a configuração ausente.
-
-## Saúde de projetos e sobrecarga
-
-O termômetro parte de 100 pontos, subtrai 10 por tarefa vencida (máximo 35) e 10 por tarefa estagnada há mais de três dias (máximo 30). Uma sprint ativa a até três dias do fim com entrega inferior a 50% subtrai 20 pontos. Carryover subtrai 0,3 ponto por ponto percentual (máximo 30). As faixas são `HEALTHY` (75–100), `WARNING` (50–74) e `CRITICAL` (0–49), com sinais objetivos para os fatores detectados.
-
-O Radar de Sobrecarga compara a capacidade semanal declarada com a soma das horas alocadas em projetos ativos. Utilização abaixo de 85% é `OPTIMAL`, de 85% a 100% é `NEAR_LIMIT` e acima de 100% é `OVERLOADED`. A tela também mostra horas livres, tarefas e story points ativos de cada membro ativo.
-
-## Configurar integrações
-
-**Google:** crie um cliente OAuth de aplicação web e cadastre exatamente `GOOGLE_CALLBACK_URL`. Preencha `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e, para restringir à organização, `GOOGLE_WORKSPACE_DOMAIN`. Os e-mails devem ser provisionados antes pela diretoria. Novas pessoas criadas na UI entram por SSO; o sistema não gera senhas para elas.
-
-**IA:** configure `AI_API_KEY`, `AI_BASE_URL` e `AI_MODEL` para um provedor compatível com Chat Completions. A UI informa os campos enviados e exige ação explícita. O contexto contém somente o projeto autorizado (até 100 tarefas recentes); nenhum modelo altera dados. A integração real com Google e o provedor de IA exige suas credenciais e não faz parte dos testes locais.
-
-## Qualidade
-
 ```bash
-pnpm typecheck
-pnpm lint
-pnpm format:check
-pnpm test
-pnpm test:integration
-pnpm build
+# Terminal 2: worker BullMQ para tarefas assíncronas
+pnpm worker
 ```
 
-A suíte de integração requer PostgreSQL e Redis ativos. Cria um banco temporário com nome aleatório, aplica o schema e o remove ao final; o usuário de teste precisa de `CREATEDB`. Nunca apaga o banco configurado. Verifica RBAC contextual/BOLA, concorrência, fechamento de escopo, auditoria imutável, rotação/replay de refresh e salas WebSocket.
+Acesse o frontend em <http://localhost:5173>. A API fica em <http://localhost:3001> (base REST: `/api/v1`). O seed cria a conta administrativa inicial usando `SEED_ADMIN_EMAIL` e `SEED_ADMIN_PASSWORD` do `.env`; altere essas credenciais antes de qualquer uso compartilhado. Para diagnosticar configuração e portas, execute `pnpm run doctor`.
 
-Para o smoke de navegador (requer seed demonstrativo):
+Para preparar o banco manualmente, use `docker compose up -d --wait`, `pnpm db:migrate` e `pnpm db:seed`.
 
-```bash
-pnpm exec playwright install --with-deps chromium
-pnpm test:e2e
-```
+## Scripts úteis
 
-O teste abre desktop e mobile, autentica, verifica ausência de overflow, abre um card, valida arraste e persistência após recarregar no desktop, acessa o mapa de alocação e encerra a sessão. Screenshots são gerados em `/tmp/citi-hub-desktop.png` e `/tmp/citi-hub-mobile.png`. Traces estão desabilitados para evitar capturar credenciais. Dependências nativas do Chromium podem exigir instalação pelo administrador do ambiente.
-
-## Estrutura e decisões
-
-```text
-apps/api/src/
-  core/         configuração, banco, políticas, Redis, barramento e outbox
-  modules/      autenticação, diretório, projetos/sprints, tarefas, dashboards, realtime
-  scripts/      migração e seed em TypeScript
-  tests/        políticas e integração de segurança
-apps/web/src/
-  core/         transporte tipado, sessão em memória, UI e WebSocket
-  features/     login, workspace, cards, métricas e visões operacionais
-packages/shared/src/  schemas Zod, DTOs, RBAC e eventos
-```
-
-Consulte [arquitetura e limites](docs/architecture.md) e [contrato REST](docs/api.md). As taxonomias organizacionais são configuráveis pela diretoria; o papel de sistema (`ADMIN`, `LEADER`, `MEMBER`) continua separado do cargo. Burndown histórico e IA em outros pontos da operação ainda precisam de implementação. Timesheet, financeiro, chat nativo e sincronizações bidirecionais permanecem fora da v1.
-
-O build da SPA fica em `apps/web/dist`. API e worker executam fontes TypeScript com `tsx`; o build faz verificação/compilação TypeScript. Hospede API/worker em Node com acesso TCP a PostgreSQL/Redis e sirva a SPA com fallback para `index.html`, encaminhando `/api` e upgrades WebSocket à API. Não há publicação externa nem infraestrutura de produção provisionada.
-
-## Convenção de commits e branches
-
-- Cada commit deve ser pequeno, atômico e representar uma única responsabilidade lógica, mantendo o repositório íntegro.
-- Use exclusivamente mensagens Conventional Commits em texto puro, sem emojis (por exemplo: `feat(api): ...`, `fix(web): ...`, `docs: ...`).
-- Trabalhe exclusivamente com branches: crie e alterne branches no diretório raiz do repositório; não use Git worktrees.
+| Comando                 | Uso                                                      |
+| ----------------------- | -------------------------------------------------------- |
+| `pnpm run doctor`       | Verifica Node, `.env` e serviços/portas locais.          |
+| `pnpm test`             | Executa testes unitários da API.                         |
+| `pnpm test:integration` | Executa testes de integração; requer PostgreSQL e Redis. |
+| `pnpm typecheck`        | Verifica os tipos TypeScript dos pacotes.                |
+| `pnpm lint`             | Executa ESLint no repositório.                           |
+| `pnpm build`            | Compila e valida os pacotes.                             |
