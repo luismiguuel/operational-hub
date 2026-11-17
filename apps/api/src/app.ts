@@ -38,7 +38,7 @@ export async function buildApp() {
   await app.register(jwt, { secret: config.JWT_SECRET });
   await app.register(rateLimit, {
     redis,
-    max: 120,
+    max: config.NODE_ENV === 'test' ? 1000 : 120,
     timeWindow: '1 minute',
     nameSpace: `hub:${config.NODE_ENV}:`,
   });

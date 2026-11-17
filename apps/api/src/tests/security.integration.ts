@@ -736,3 +736,213 @@ test('provisionamento em lote relata emails repetidos e grava auditoria', async 
       .rowCount,
   );
 });
+
+async function backlogFixture() {
+  const created = await app.inject({
+    method: 'POST',
+    url: '/api/v1/projects',
+    headers: headers(adminToken),
+    payload: { name: 'Projeto de priorização', kind: 'INTERNAL' },
+  });
+  assert.equal(created.statusCode, 201, created.body);
+  const project = projectSchema.parse(created.json());
+  const foreignResponse = await app.inject({
+    method: 'POST',
+    url: '/api/v1/projects',
+    headers: headers(adminToken),
+    payload: { name: 'Projeto externo à priorização', kind: 'INTERNAL' },
+  });
+  assert.equal(foreignResponse.statusCode, 201, foreignResponse.body);
+  const foreignProject = projectSchema.parse(foreignResponse.json());
+  await db.query('UPDATE users SET active=true,is_active=true,deactivated_at=NULL WHERE id=$1', [
+    memberId,
+  ]);
+  await db.query(
+    "INSERT INTO allocations(project_id,user_id,role,weekly_hours) VALUES($1,$2,'MEMBER',8),($3,$2,'MEMBER',8)",
+    [project.id, memberId, foreignProject.id],
+  );
+  const plannedSprintId = crypto.randomUUID();
+  const activeSprintId = crypto.randomUUID();
+  const foreignSprintId = crypto.randomUUID();
+  for (const [sprintId, owner, state] of [
+    [plannedSprintId, project.id, 'PLANNED'],
+    [activeSprintId, project.id, 'ACTIVE'],
+    [foreignSprintId, foreignProject.id, 'PLANNED'],
+  ])
+    await db.query(
+      'INSERT INTO sprints(id,project_id,name,goal,starts_on,ends_on,state) VALUES($1,$2,$3,$4,current_date,current_date+14,$5)',
+      [sprintId, owner, 'Sprint de priorização', 'Escopo de teste', state],
+    );
+  return {
+    projectId: project.id,
+    foreignProjectId: foreignProject.id,
+    plannedSprintId,
+    activeSprintId,
+    foreignSprintId,
+  };
+}
+
+async function createBacklogTask(projectId: string, title: string, sprintId?: string) {
+  const response = await app.inject({
+    method: 'POST',
+    url: `/api/v1/projects/${projectId}/tasks`,
+    headers: headers(adminToken),
+    payload: { title, ...(sprintId ? { sprintId } : {}) },
+  });
+  assert.equal(response.statusCode, 201, response.body);
+  return taskSchema.parse(response.json());
+}
+
+test('ordenação manual persiste posição, preserva a cauda e bloqueia IDs inválidos ou sem liderança', async () => {
+  const fixture = await backlogFixture();
+  const first = await createBacklogTask(fixture.projectId, 'Primeira tarefa');
+  const second = await createBacklogTask(fixture.projectId, 'Segunda tarefa');
+  const third = await createBacklogTask(fixture.projectId, 'Terceira tarefa');
+  const foreignTask = await createBacklogTask(fixture.foreignProjectId, 'Tarefa de outro projeto');
+  const sprintTask = await createBacklogTask(
+    fixture.projectId,
+    'Tarefa já planejada',
+    fixture.plannedSprintId,
+  );
+
+  const reordered = await app.inject({
+    method: 'PATCH',
+    url: `/api/v1/projects/${fixture.projectId}/backlog/reorder`,
+    headers: headers(adminToken),
+    payload: { orderedTaskIds: [third.id, first.id] },
+  });
+  assert.equal(reordered.statusCode, 200, reordered.body);
+  assert.deepEqual(reordered.json().orderedTaskIds, [third.id, first.id, second.id]);
+  const listed = await app.inject({
+    url: `/api/v1/projects/${fixture.projectId}/tasks`,
+    headers: headers(adminToken),
+  });
+  assert.deepEqual(
+    z
+      .array(taskSchema)
+      .parse(listed.json())
+      .map((task) => task.id),
+    [third.id, first.id, second.id, sprintTask.id],
+  );
+  const positions = await db.query<{ id: string; backlog_position: number }>(
+    'SELECT id,backlog_position FROM tasks WHERE project_id=$1 AND sprint_id IS NULL ORDER BY backlog_position,id',
+    [fixture.projectId],
+  );
+  assert.deepEqual(
+    positions.rows.map((task) => [task.id, task.backlog_position]),
+    [
+      [third.id, 0],
+      [first.id, 1],
+      [second.id, 2],
+    ],
+  );
+  for (const [orderedTaskIds, status] of [
+    [[foreignTask.id], 404],
+    [[sprintTask.id], 400],
+    [[first.id, first.id], 400],
+  ] as const) {
+    const rejected = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/projects/${fixture.projectId}/backlog/reorder`,
+      headers: headers(adminToken),
+      payload: { orderedTaskIds },
+    });
+    assert.equal(rejected.statusCode, status, rejected.body);
+  }
+  const memberAttempt = await app.inject({
+    method: 'PATCH',
+    url: `/api/v1/projects/${fixture.projectId}/backlog/reorder`,
+    headers: headers(memberToken),
+    payload: { orderedTaskIds: [first.id] },
+  });
+  assert.equal(memberAttempt.statusCode, 403, memberAttempt.body);
+  const event = await db.query<{ payload: unknown }>(
+    "SELECT payload FROM outbox WHERE payload->>'type'='BacklogReordered' AND payload->>'projectId'=$1",
+    [fixture.projectId],
+  );
+  assert.equal(event.rows.length, 1);
+  assert.equal(eventSchema.parse(event.rows[0]?.payload).type, 'BacklogReordered');
+  assert.ok(
+    (
+      await db.query(
+        "SELECT id FROM audit_log WHERE action='backlog.reordered' AND resource_id=$1",
+        [fixture.projectId],
+      )
+    ).rowCount,
+  );
+});
+
+test('pull do backlog move tarefas à sprint planejada e rejeita destino inválido ou tarefa fora do backlog', async () => {
+  const fixture = await backlogFixture();
+  const first = await createBacklogTask(fixture.projectId, 'Tarefa priorizada um');
+  const second = await createBacklogTask(fixture.projectId, 'Tarefa priorizada dois');
+  const remaining = await createBacklogTask(fixture.projectId, 'Tarefa restante');
+  const foreignTask = await createBacklogTask(fixture.foreignProjectId, 'Tarefa em outro projeto');
+  const sprintTask = await createBacklogTask(
+    fixture.projectId,
+    'Tarefa já em sprint',
+    fixture.plannedSprintId,
+  );
+  for (const [targetSprintId, taskIds, status] of [
+    [fixture.activeSprintId, [first.id], 400],
+    [fixture.foreignSprintId, [first.id], 404],
+    [crypto.randomUUID(), [first.id], 404],
+    [fixture.plannedSprintId, [foreignTask.id], 404],
+    [fixture.plannedSprintId, [sprintTask.id], 400],
+  ] as const) {
+    const rejected = await app.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${fixture.projectId}/backlog/pull-to-sprint`,
+      headers: headers(adminToken),
+      payload: { taskIds, targetSprintId },
+    });
+    assert.equal(rejected.statusCode, status, rejected.body);
+  }
+  const pulled = await app.inject({
+    method: 'POST',
+    url: `/api/v1/projects/${fixture.projectId}/backlog/pull-to-sprint`,
+    headers: headers(adminToken),
+    payload: { taskIds: [first.id, second.id], targetSprintId: fixture.plannedSprintId },
+  });
+  assert.equal(pulled.statusCode, 200, pulled.body);
+  assert.equal(pulled.json().movedCount, 2);
+  const records = await db.query<{ sprint_id: string | null; version: number }>(
+    'SELECT sprint_id,version FROM tasks WHERE id=ANY($1::uuid[]) ORDER BY id',
+    [[first.id, second.id]],
+  );
+  assert.ok(records.rows.every((task) => task.sprint_id === fixture.plannedSprintId));
+  assert.ok(records.rows.every((task) => task.version === 2));
+  const activity = await db.query<{ payload: unknown }>(
+    "SELECT payload FROM activity_log WHERE project_id=$1 AND action='TaskPulledToSprint'",
+    [fixture.projectId],
+  );
+  assert.deepEqual(
+    activity.rows.map((row) => eventSchema.parse(row.payload).type),
+    ['TaskPulledToSprint', 'TaskPulledToSprint'],
+  );
+  assert.ok(
+    (
+      await db.query(
+        "SELECT id FROM audit_log WHERE action='backlog.pulled_to_sprint' AND resource_id=$1",
+        [fixture.projectId],
+      )
+    ).rowCount,
+  );
+  const outbox = await db.query<{ payload: unknown }>(
+    "SELECT payload FROM outbox WHERE payload->>'type'='BacklogPulledToSprint' AND payload->>'projectId'=$1",
+    [fixture.projectId],
+  );
+  assert.equal(eventSchema.parse(outbox.rows[0]?.payload).type, 'BacklogPulledToSprint');
+  const remainingList = await app.inject({
+    url: `/api/v1/projects/${fixture.projectId}/tasks`,
+    headers: headers(adminToken),
+  });
+  assert.deepEqual(
+    z
+      .array(taskSchema)
+      .parse(remainingList.json())
+      .filter((task) => task.sprintId === null)
+      .map((task) => task.id),
+    [remaining.id],
+  );
+});
