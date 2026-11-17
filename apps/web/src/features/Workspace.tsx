@@ -1,3 +1,4 @@
+import { Knowledge } from './knowledge/Knowledge';
 import { useId, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -61,7 +62,7 @@ export function Workspace({ project }: { project: Project }) {
     user = useSession((s) => s.user);
   const manager =
     user?.role === 'ADMIN' || (user?.role === 'LEADER' && project.myRole === 'LEADER');
-  const [tab, setTab] = useState<'board' | 'backlog' | 'sprints'>('board'),
+  const [tab, setTab] = useState<'board' | 'backlog' | 'sprints' | 'knowledge'>('board'),
     [search, setSearch] = useState(''),
     [mine, setMine] = useState(false),
     [priority, setPriority] = useState(false),
@@ -270,6 +271,7 @@ export function Workspace({ project }: { project: Project }) {
               { id: 'board', label: 'Kanban', icon: LayoutGrid },
               { id: 'backlog', label: 'Backlog', icon: List },
               { id: 'sprints', label: 'Sprints', icon: Layers },
+              { id: 'knowledge', label: 'Base do Projeto', icon: Layers },
             ] as const
           ).map((item) => (
             <button
@@ -301,7 +303,9 @@ export function Workspace({ project }: { project: Project }) {
           Carregando workspace…
         </p>
       )}
-      {tab === 'sprints' ? (
+      {tab === 'knowledge' ? (
+        <Knowledge projectId={project.id} />
+      ) : tab === 'sprints' ? (
         <>
           <ProjectMetrics projectId={project.id} />
           <div className="toolbar">

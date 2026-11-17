@@ -79,7 +79,7 @@ export const patch = (body: unknown): RequestInit => ({
   method: 'PATCH',
   body: JSON.stringify(body),
 });
-export type View = 'workspace' | 'projects' | 'mine' | 'people' | 'heat';
+export type View = 'workspace' | 'projects' | 'mine' | 'people' | 'heat' | 'knowledge';
 export const useUI = create<{
   view: View;
   projectId: string | null;

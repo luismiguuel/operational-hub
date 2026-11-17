@@ -12,11 +12,13 @@ import {
   ChartNoAxesCombined,
   ArrowUpRight,
   LogOut,
+  Library,
 } from 'lucide-react';
 import { api, ok, post, refresh, useSession, useUI } from './core/api';
 import type { View } from './core/api';
 import { Avatar, Empty, ErrorMessage } from './core/components';
 import { Logo } from './core/ui/Logo';
+import { Knowledge } from './features/knowledge/Knowledge';
 import { Login } from './features/Login';
 import { Workspace } from './features/Workspace';
 import { Projects, MySpace, Heat } from './features/Pages';
@@ -62,6 +64,7 @@ function App() {
     { id: 'mine', title: 'Meu espaço', icon: LayoutDashboard },
     { id: 'projects', title: 'Projetos', icon: FolderKanban },
     { id: 'people', title: 'Pessoas & áreas', icon: UsersRound },
+    { id: 'knowledge', title: 'Memória Institucional', icon: Library },
     ...(canHeat
       ? [{ id: 'heat' as const, title: 'Mapa de alocação', icon: ChartNoAxesCombined }]
       : []),
@@ -200,6 +203,7 @@ function App() {
           {view === 'projects' && <Projects projects={projects.data ?? []} />}{' '}
           {view === 'mine' && <MySpace projects={projects.data ?? []} />}{' '}
           {view === 'heat' && <Heat />}
+          {view === 'knowledge' && <Knowledge />}
           {view === 'people' && <People projects={projects.data ?? []} />}
         </main>
       </div>
