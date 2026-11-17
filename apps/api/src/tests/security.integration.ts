@@ -44,6 +44,8 @@ let adminToken = '',
 const origin = process.env['WEB_ORIGIN'] ?? 'http://localhost:5173';
 const headers = (token: string) => ({ authorization: `Bearer ${token}`, origin });
 before(async () => {
+  const rateKeys = await redis.keys('hub:test:*');
+  if (rateKeys.length) await redis.del(...rateKeys);
   await maintenance.query(`CREATE DATABASE ${name}`);
   await db.query(schema);
   await db.query(knowledgeSchema);
@@ -1051,4 +1053,123 @@ test('memória institucional indexa documentos e isola consultas por projeto', a
     });
     assert.equal(allowed.statusCode, 200, allowed.body);
   }
+});
+
+test('health score sinaliza atrasos, estagnação e carryover e respeita escopo contextual', async () => {
+  await db.query('UPDATE users SET active=true,is_active=true WHERE id=$1', [memberId]);
+  const created = await app.inject({
+    method: 'POST',
+    url: '/api/v1/projects',
+    headers: headers(adminToken),
+    payload: { name: 'Projeto health report', kind: 'INTERNAL' },
+  });
+  assert.equal(created.statusCode, 201, created.body);
+  const restrictedId = projectSchema.parse(created.json()).id;
+  const allocated = await app.inject({
+    method: 'PUT',
+    url: `/api/v1/projects/${restrictedId}/allocations`,
+    headers: headers(adminToken),
+    payload: { userId: memberId, role: 'MEMBER', weeklyHours: 8 },
+  });
+  assert.equal(allocated.statusCode, 200, allocated.body);
+  const sprint = crypto.randomUUID();
+  await db.query(
+    "INSERT INTO sprints(id,project_id,name,goal,starts_on,ends_on,state) VALUES($1,$2,'Sprint risco','Teste health',current_date-14,current_date-1,'ACTIVE')",
+    [sprint, restrictedId],
+  );
+  for (const [title, status, due, updated] of [
+    [
+      'Vencida',
+      'TODO',
+      new Date(Date.now() - 86400000 * 5).toISOString().slice(0, 10),
+      new Date(Date.now() - 86400000 * 5).toISOString(),
+    ],
+    ['Estagnada', 'IN_PROGRESS', null, new Date(Date.now() - 86400000 * 5).toISOString()],
+    [
+      'Vencida dois',
+      'TODO',
+      new Date(Date.now() - 86400000 * 5).toISOString().slice(0, 10),
+      new Date(Date.now() - 86400000 * 5).toISOString(),
+    ],
+  ]) {
+    await db.query(
+      "INSERT INTO tasks(id,project_id,title,kind,status,points,priority,due_date,created_by,updated_at,sprint_id) VALUES($1,$2,$3,'TASK',$4,8,'HIGH',$5,$6,$7,$8)",
+      [crypto.randomUUID(), restrictedId, title, status, due, adminId, updated, sprint],
+    );
+  }
+  const report = await app.inject({
+    url: `/api/v1/projects/${restrictedId}/health`,
+    headers: headers(memberToken),
+  });
+  assert.equal(report.statusCode, 200, report.body);
+  const body = report.json();
+  assert.equal(body.status, 'CRITICAL');
+  assert.ok(body.score < 50);
+  assert.ok(body.signals.some((signal: string) => signal.includes('vencidas')));
+  assert.ok(body.signals.some((signal: string) => signal.includes('estagnadas')));
+  assert.ok(body.signals.some((signal: string) => signal.includes('entrega')));
+  const list = await app.inject({ url: '/api/v1/projects/health', headers: headers(memberToken) });
+  assert.equal(list.statusCode, 200, list.body);
+  assert.ok(list.json().some((item: { projectId: string }) => item.projectId === restrictedId));
+  assert.ok(list.json().every((item: { projectId: string }) => item.projectId !== otherProjectId));
+  const denied = await app.inject({
+    url: `/api/v1/projects/${otherProjectId}/health`,
+    headers: headers(memberToken),
+  });
+  assert.ok([403, 404].includes(denied.statusCode));
+});
+
+test('radar calcula faixas de capacidade e exclui membros inativos', async () => {
+  const ids: string[] = [
+    crypto.randomUUID(),
+    crypto.randomUUID(),
+    crypto.randomUUID(),
+    crypto.randomUUID(),
+  ];
+  for (const [index, userId] of ids.entries()) {
+    await db.query(
+      "INSERT INTO users(id,name,email,role,area,subarea,title,weekly_hours) VALUES($1,$2,$3,'MEMBER','Tech','Dev','Test',$4)",
+      [userId, `Radar ${index}`, `${userId}@example.org`, 10],
+    );
+    if (index < 3)
+      await db.query(
+        "INSERT INTO allocations(project_id,user_id,role,weekly_hours) VALUES($1,$2,'MEMBER',$3)",
+        [projectId, userId, [5, 9, 12][index]],
+      );
+    else await db.query('UPDATE users SET is_active=false WHERE id=$1', [userId]);
+  }
+  const response = await app.inject({
+    url: '/api/v1/allocation/radar',
+    headers: headers(adminToken),
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  const report = response.json();
+  const expected = [
+    { riskLevel: 'OPTIMAL', utilizationPercent: 50, allocatedHours: 5 },
+    { riskLevel: 'NEAR_LIMIT', utilizationPercent: 90, allocatedHours: 9 },
+    { riskLevel: 'OVERLOADED', utilizationPercent: 120, allocatedHours: 12 },
+  ];
+  for (const [index, userId] of ids.slice(0, 3).entries()) {
+    const member = report.members.find((row: { userId: string }) => row.userId === userId);
+    assert.ok(member, `Membro de teste ${userId} deve aparecer no radar`);
+    assert.equal(member.riskLevel, expected[index]?.riskLevel);
+    assert.equal(member.utilizationPercent, expected[index]?.utilizationPercent);
+    assert.equal(member.allocatedHours, expected[index]?.allocatedHours);
+    assert.equal(member.activeTasksCount, 0);
+  }
+  assert.equal(report.totals.totalMembers, report.members.length);
+  assert.equal(
+    report.totals.overloadedCount,
+    report.members.filter((member: { riskLevel: string }) => member.riskLevel === 'OVERLOADED')
+      .length,
+  );
+  assert.equal(
+    report.totals.nearLimitCount,
+    report.members.filter((member: { riskLevel: string }) => member.riskLevel === 'NEAR_LIMIT')
+      .length,
+  );
+  assert.equal(
+    report.members.some((member: { userId: string }) => member.userId === ids[3]),
+    false,
+  );
 });
