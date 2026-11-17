@@ -17,6 +17,8 @@ const result = z
     GOOGLE_CALLBACK_URL: optional,
     GOOGLE_WORKSPACE_DOMAIN: optional,
     AI_API_KEY: optional,
+    OPENAI_API_KEY: optional,
+    GEMINI_API_KEY: optional,
     AI_BASE_URL: z.string().url().default('https://api.openai.com/v1'),
     AI_MODEL: z.string().default('gpt-4.1-mini'),
   })

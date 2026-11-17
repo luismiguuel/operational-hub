@@ -210,6 +210,15 @@ export const eventSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     id,
+    type: z.literal('KnowledgeChanged'),
+    actorId: id,
+    documentId: id,
+    projectId: id.nullable(),
+    action: z.string(),
+    occurredAt: z.string().datetime(),
+  }),
+  z.object({
+    id,
     type: z.literal('OrgManagementChanged'),
     actorId: id,
     resourceType: z.enum(['AREA', 'SUBAREA', 'ROLE', 'MEMBER', 'BULK_PROVISION']),

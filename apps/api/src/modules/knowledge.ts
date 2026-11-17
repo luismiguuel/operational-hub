@@ -1,3 +1,4 @@
+import { knowledgeChange, synthesizeKnowledge } from '../core/knowledge.js';
 import { knowledgeQueue } from '../core/redis.js';
 import { config } from '../core/config.js';
 import type { FastifyInstance } from 'fastify';
@@ -10,8 +11,13 @@ import {
 } from '@hub/shared';
 import { authenticate } from './auth.js';
 import { db, transaction, HttpError, found } from '../core/db.js';
-import { audit, projectAccess } from '../core/access.js';
-import { citationRow, documentColumns, indexKnowledge, localEmbedding } from '../core/knowledge.js';
+import { projectAccess } from '../core/access.js';
+import {
+  citationRow,
+  documentColumns,
+  indexKnowledge,
+  externalEmbedding,
+} from '../core/knowledge.js';
 const accessSql = `(d.project_id IS NULL OR $1='ADMIN' OR EXISTS(SELECT 1 FROM allocations a WHERE a.project_id=d.project_id AND a.user_id=$2))`;
 export async function knowledgeRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', authenticate);
@@ -47,9 +53,13 @@ export async function knowledgeRoutes(app: FastifyInstance): Promise<void> {
           request.actor.id,
         ],
       );
-      await audit(client, request.actor.id, 'knowledge.created', documentId, {
-        projectId: body.projectId ?? null,
-      });
+      await knowledgeChange(
+        client,
+        request.actor.id,
+        documentId,
+        body.projectId ?? null,
+        'created',
+      );
     });
     if (config.NODE_ENV === 'production') await knowledgeQueue.add('index', { documentId });
     else await indexKnowledge(documentId);
@@ -74,7 +84,7 @@ export async function knowledgeRoutes(app: FastifyInstance): Promise<void> {
         request.actor.role,
         request.actor.id,
         body.projectId ?? null,
-        JSON.stringify(localEmbedding(body.question)),
+        JSON.stringify(await externalEmbedding(body.question)),
         body.limit,
       ],
     );
@@ -83,11 +93,11 @@ export async function knowledgeRoutes(app: FastifyInstance): Promise<void> {
       .parse(rows.rows)
       .filter((row) => row.score > 0);
     return {
-      answer: citations.length
-        ? citations.map((c, i) => `[${i + 1}] ${c.snippet}`).join('\n\n')
-        : 'Nenhum trecho relevante encontrado.',
+      ...(await synthesizeKnowledge(
+        body.question,
+        citations.map((c) => c.snippet),
+      )),
       citations,
-      mode: 'EXTRACTIVE_FALLBACK',
     };
   });
   for (const operation of ['reindex', 'delete'] as const) {
@@ -110,10 +120,15 @@ export async function knowledgeRoutes(app: FastifyInstance): Promise<void> {
       if (operation === 'delete')
         await transaction(async (client) => {
           await client.query('DELETE FROM knowledge_documents WHERE id=$1', [documentId]);
-          await audit(client, request.actor.id, 'knowledge.deleted', documentId, {});
+          await knowledgeChange(client, request.actor.id, documentId, doc.projectId, 'deleted');
         });
       else {
-        await db.query("UPDATE knowledge_documents SET status='PENDING' WHERE id=$1", [documentId]);
+        await transaction(async (client) => {
+          await client.query("UPDATE knowledge_documents SET status='PENDING' WHERE id=$1", [
+            documentId,
+          ]);
+          await knowledgeChange(client, request.actor.id, documentId, doc.projectId, 'reindex');
+        });
         if (config.NODE_ENV === 'production') await knowledgeQueue.add('index', { documentId });
         else await indexKnowledge(documentId);
       }
