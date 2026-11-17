@@ -46,6 +46,12 @@ Abra <http://localhost:5173>. Em outro terminal, com Node 22 ativo, execute `pnp
 - Memória Institucional com documentos e chunks em pgvector, indexação BullMQ, busca semântica com citações, auditoria e outbox. OpenAI/Gemini são opcionais; sem chave, o embedding hash determinístico e a síntese extrativa local mantêm o fluxo disponível. O RBAC separa documentos globais dos escopos de projeto.
 - Resumo de projeto por IA, assíncrono, autorizado, auditado e sujeito a revisão humana. Sem chave, a API retorna 503 explicando a configuração ausente.
 
+## Saúde de projetos e sobrecarga
+
+O termômetro parte de 100 pontos, subtrai 10 por tarefa vencida (máximo 35) e 10 por tarefa estagnada há mais de três dias (máximo 30). Uma sprint ativa a até três dias do fim com entrega inferior a 50% subtrai 20 pontos. Carryover subtrai 0,3 ponto por ponto percentual (máximo 30). As faixas são `HEALTHY` (75–100), `WARNING` (50–74) e `CRITICAL` (0–49), com sinais objetivos para os fatores detectados.
+
+O Radar de Sobrecarga compara a capacidade semanal declarada com a soma das horas alocadas em projetos ativos. Utilização abaixo de 85% é `OPTIMAL`, de 85% a 100% é `NEAR_LIMIT` e acima de 100% é `OVERLOADED`. A tela também mostra horas livres, tarefas e story points ativos de cada membro ativo.
+
 ## Configurar integrações
 
 **Google:** crie um cliente OAuth de aplicação web e cadastre exatamente `GOOGLE_CALLBACK_URL`. Preencha `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e, para restringir à organização, `GOOGLE_WORKSPACE_DOMAIN`. Os e-mails devem ser provisionados antes pela diretoria. Novas pessoas criadas na UI entram por SSO; o sistema não gera senhas para elas.

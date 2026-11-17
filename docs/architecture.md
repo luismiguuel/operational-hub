@@ -84,6 +84,12 @@ O job de resumo transporta apenas ator e projeto. O worker revalida autorizaçã
 
 O RAG usa `knowledge_documents` e `knowledge_chunks` com embeddings de 1536 dimensões e busca por similaridade cosseno via pgvector/HNSW. A indexação usa BullMQ em produção; desenvolvimento e testes processam imediatamente. Embeddings OpenAI ou Gemini e síntese LLM são opcionais. Sem chave, em falha de provedor ou em teste, o sistema usa embedding hash local determinístico e resposta extrativa baseada nos trechos recuperados. Consultas sempre aplicam RBAC: documentos globais são acessíveis a membros autenticados e os de projeto só aparecem a usuários vinculados, liderança contextual ou ADMIN. Criação, reindexação, exclusão e processamento registram auditoria e eventos da outbox.
 
+## Saúde de projetos e capacidade
+
+O termômetro começa em 100 pontos: cada tarefa vencida subtrai 10 (até 35); cada tarefa não concluída sem atualização há mais de três dias subtrai 10 (até 30); sprint ativa com até três dias restantes e entrega abaixo de 50% subtrai 20; carryover histórico subtrai 0,3 ponto por ponto percentual (até 30). O score é limitado a 0–100: `HEALTHY` a partir de 75, `WARNING` de 50 a 74 e `CRITICAL` abaixo de 50. Os sinais identificam vencimentos, estagnação, baixa entrega próxima ao fim e carryover acima de 30%.
+
+O radar soma as horas alocadas nos projetos ativos e compara com a capacidade semanal declarada de cada membro ativo. Utilização abaixo de 85% é `OPTIMAL`, de 85% a 100% é `NEAR_LIMIT` e acima de 100% é `OVERLOADED`. Também apresenta tarefas e story points em andamento; horas disponíveis são limitadas a zero por membro.
+
 ## Próximos incrementos
 
 1. Convites e recuperação de acesso.
