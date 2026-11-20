@@ -115,7 +115,7 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
   app.post('/projects/:projectId/ai/summary', async (request, reply) => {
     const { projectId } = z.object({ projectId: id }).parse(request.params);
     await projectAccess(request.actor, projectId, true);
-    if (!config.AI_API_KEY)
+    if (!(config.AI_PROVIDER === 'gemini' ? config.GEMINI_API_KEY : config.AI_API_KEY))
       throw new HttpError(503, 'Configure o provedor de IA para gerar resumos.');
     const job = await aiQueue.add('summary', { projectId, actorId: request.actor.id });
     return reply.code(202).send({ id: job.id });
